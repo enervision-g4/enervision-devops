@@ -1,0 +1,35 @@
+services:
+  runner-dev:
+    image: myoung34/github-runner:latest
+    restart: unless-stopped
+    environment:
+      ORG_NAME: "enervision-g4"
+      RUNNER_SCOPE: "org"
+      ACCESS_TOKEN: "${GH_PAT_ORG}"
+      RUNNER_NAME: "runner-dev-01"
+      RUNNER_GROUP: "onprem-dev"
+      RUNNER_WORKDIR: "/home/enervision-g4/tmp/runner-dev"
+      LABELS: "self-hosted,dev,linux,onprem"
+      EPHEMERAL: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runner-dev-work:/home/enervision-g4/tmp/runner-dev
+
+  # runner-prod:
+  #   image: myoung34/github-runner:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     REPO_URL: "https://github.com/enervision-g4/votre-repo"
+  #     RUNNER_NAME: "runner-prod-01"
+  #     RUNNER_TOKEN: "${GH_PAT}"
+  #     RUNNER_WORKDIR: "/home/enervision-g4/tmp/runner-prod"
+  #     LABELS: "self-hosted,prod,linux,onprem"
+  #     EPHEMERAL: "true"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - runner-prod-work:/home/enervision-g4/tmp/runner-prod
+
+volumes:
+  runner-dev-work:
+  # runner-prod-work:
+ 
