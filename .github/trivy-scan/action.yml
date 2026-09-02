@@ -1,0 +1,29 @@
+name: 'EnerVision Trivy Image Scan'
+description: 'Runs a Trivy vulnerability scan on a built Docker image'
+
+inputs:
+  image-ref:
+    description: 'Image to scan, e.g. ghcr.io/enervision/api:${{ github.sha }}'
+    required: true
+  severity:
+    description: 'Vulnerability severities to report'
+    required: false
+    default: 'HIGH,CRITICAL'
+  fail-build:
+    description: 'Exit code on findings: 1 = fail the job, 0 = report only'
+    required: false
+    default: '1'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@v0.36.0
+      with:
+        scan-type: 'image'
+        image-ref: ${{ inputs.image-ref }}
+        format: 'table'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: ${{ inputs.severity }}
+        exit-code: ${{ inputs.fail-build }}

@@ -1,0 +1,51 @@
+name: Enforce branch flow
+
+on:
+  workflow_call:
+    inputs:
+      protected_base:
+        type: string
+        default: 'main'
+      required_source:
+        type: string
+        default: 'develop'
+      dev_base:
+        type: string
+        default: 'develop'
+      dev_allowed_patterns:
+        type: string
+        default: 'feature/* fix/* chore/*'
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR source/target
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          echo "PR: $HEAD -> $BASE"
+
+          # Rule 1: main only accepts PRs from develop
+          if [ "$BASE" = "${{ inputs.protected_base }}" ] && [ "$HEAD" != "${{ inputs.required_source }}" ]; then
+            echo "❌ PRs into '${{ inputs.protected_base }}' are only allowed from '${{ inputs.required_source }}'."
+            exit 1
+          fi
+
+          # Rule 2: develop only accepts PRs from allowed branch patterns
+          if [ "$BASE" = "${{ inputs.dev_base }}" ]; then
+            MATCHED=false
+            for pattern in ${{ inputs.dev_allowed_patterns }}; do
+              case "$HEAD" in
+                $pattern) MATCHED=true ;;
+              esac
+            done
+
+            if [ "$MATCHED" = false ]; then
+              echo "❌ PRs into '${{ inputs.dev_base }}' must come from one of: ${{ inputs.dev_allowed_patterns }}"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Branch flow OK"
