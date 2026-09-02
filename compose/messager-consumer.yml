@@ -1,0 +1,16 @@
+name: g4-messager-consumer
+
+services:
+  messager-consumer:
+    image: ${IMAGE}
+    container_name: g4_messager_consumer
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+    networks:
+      - g4_net
+
+networks:
+  g4_net:
+    external: true
