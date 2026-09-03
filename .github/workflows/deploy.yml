@@ -48,7 +48,7 @@ jobs:
     environment: "onprem-${{ inputs.stage }}"
     steps:
       - name: Checkout enervision-devops
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Write .env and deploy
         env:
