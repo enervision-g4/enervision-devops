@@ -18,9 +18,15 @@ name: Deploy service
 # (infra/runners/), qui tournent avec le socket Docker de l'hôte monté :
 # le job s'exécute directement "sur" le serveur, pas de SSH nécessaire.
 #
-# "stage" choisit le runner (label dev/prod, cf infra/runners/
-# docker-compose.runners.yml) ET l'environnement GitHub associé
-# (onprem-dev / onprem-prod), qui porte le secret ENV_FILE_CONTENTS.
+# IMPORTANT : les runners dev et prod tournent sur le MÊME hôte Docker (même
+# docker.sock). Sans distinction, deux déploiements (dev puis prod)
+# entreraient en collision sur les mêmes noms de conteneur/volume/dossier.
+# "stage" sert donc à la fois à choisir le runner (label dev/prod) ET à
+# suffixer tout ce qui pourrait collisionner : le dossier sur le serveur, et
+# (via la variable STAGE injectée dans le .env) le nom des conteneurs et des
+# volumes dans chaque compose/<service>.yml — voir compose/db.yml et
+# compose/api.yml pour le pattern (${STAGE} dans container_name et dans le
+# nom du volume).
 
 on:
   workflow_call:
@@ -70,8 +76,14 @@ jobs:
 
           docker network create g4_net 2>/dev/null || true
           cd "$TARGET_DIR"
-          docker compose -f "${{ inputs.service }}.yml" pull
-          docker compose -f "${{ inputs.service }}.yml" up -d
+          # IMPORTANT : chaque compose/<service>.yml a un "name:" fixe (ex. "g4-db"),
+          # identique pour dev et prod. Sans -p ici, docker compose considère dev et
+          # prod comme le MÊME projet (labels com.docker.compose.project identiques)
+          # et remplace le conteneur de l'autre stage au lieu d'en créer un séparé,
+          # même si container_name diffère. -p force un projet distinct par service+stage.
+          PROJECT="g4-${{ inputs.service }}-${{ inputs.stage }}"
+          docker compose -p "$PROJECT" -f "${{ inputs.service }}.yml" pull
+          docker compose -p "$PROJECT" -f "${{ inputs.service }}.yml" up -d
           docker image prune -f
 
 # NOTE (service "db" uniquement) : compose/db.yml monte "./db/init" en bind
