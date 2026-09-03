@@ -8,13 +8,19 @@ name: Deploy service
 #       uses: <org>/enervision-devops/.github/workflows/deploy.yml@main
 #       with:
 #         service: api
-#         environment: onprem
+#         stage: prod        # ou "dev"
 #         image: ghcr.io/<org>/enervision-api:${{ github.sha }}
 #       secrets: inherit
 #
-# Ce fichier ne connaît rien de spécifique à un service : il se contente
-# de lancer `docker compose -f compose/<service>.yml up -d` avec le
-# `.env` de l'environnement demandé, sur la machine cible.
+# Le serveur on-premise n'est joignable que depuis le réseau de l'école :
+# un runner GitHub hébergé (ubuntu-latest) ne peut pas s'y connecter en SSH.
+# On s'appuie donc sur les runners self-hosted déjà en place
+# (infra/runners/), qui tournent avec le socket Docker de l'hôte monté :
+# le job s'exécute directement "sur" le serveur, pas de SSH nécessaire.
+#
+# "stage" choisit le runner (label dev/prod, cf infra/runners/
+# docker-compose.runners.yml) ET l'environnement GitHub associé
+# (onprem-dev / onprem-prod), qui porte le secret ENV_FILE_CONTENTS.
 
 on:
   workflow_call:
@@ -23,8 +29,8 @@ on:
         description: "Nom du service (correspond à compose/<service>.yml)"
         required: true
         type: string
-      environment:
-        description: "Environnement cible (onprem, azure, ovh...)"
+      stage:
+        description: "dev ou prod — choisit le runner et l'environnement onprem-<stage>"
         required: true
         type: string
       image:
@@ -32,52 +38,45 @@ on:
         required: true
         type: string
     secrets:
-      SSH_HOST:
-        required: true
-      SSH_USER:
-        required: true
-      SSH_PRIVATE_KEY:
-        required: true
-      SSH_PORT:
-        required: true
       ENV_FILE_CONTENTS:
-        description: "Contenu du .env de l'environnement cible (secret GitHub par environnement)"
+        description: "Contenu du .env de l'environnement cible (secret GitHub par environnement onprem-<stage>)"
         required: true
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    runs-on: [self-hosted, "${{ inputs.stage }}"]
+    environment: "onprem-${{ inputs.stage }}"
     steps:
       - name: Checkout enervision-devops
         uses: actions/checkout@v4
 
-      - name: Copy compose file + init scripts to target
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: "compose/${{ inputs.service }}.yml,db/init/*"
-          target: "/opt/g4/${{ inputs.service }}"
+      - name: Write .env and deploy
+        env:
+          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          TARGET_DIR="/opt/g4/${{ inputs.service }}"
+          sudo mkdir -p "$TARGET_DIR"
+          sudo cp "compose/${{ inputs.service }}.yml" "$TARGET_DIR/"
+          sudo cp -r db/init "$TARGET_DIR/db-init" 2>/dev/null || true
 
-      - name: Write .env and deploy over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          envs: IMAGE
-          script: |
-            mkdir -p /opt/g4/${{ inputs.service }}
-            cat > /opt/g4/${{ inputs.service }}/.env << 'EOF'
-            ${{ secrets.ENV_FILE_CONTENTS }}
-            IMAGE=${{ inputs.image }}
-            EOF
-            docker network create g4_net 2>/dev/null || true
-            cd /opt/g4/${{ inputs.service }}
-            docker compose -f compose/${{ inputs.service }}.yml pull
-            docker compose -f compose/${{ inputs.service }}.yml up -d
-            docker image prune -f
+          printf '%s\n' "$ENV_FILE_CONTENTS" | sudo tee "$TARGET_DIR/.env" > /dev/null
+          echo "IMAGE=$IMAGE" | sudo tee -a "$TARGET_DIR/.env" > /dev/null
+
+          docker network create g4_net 2>/dev/null || true
+          cd "$TARGET_DIR"
+          docker compose -f "${{ inputs.service }}.yml" pull
+          docker compose -f "${{ inputs.service }}.yml" up -d
+          docker image prune -f
+
+# NOTE (service "db" uniquement) : compose/db.yml monte "./db/init" en bind
+# mount. Comme le runner self-hosted tourne lui-même dans un conteneur avec
+# le socket Docker de l'hôte monté (Docker-outside-of-Docker), un chemin
+# relatif checké out DANS le runner n'est pas forcément résolu par le
+# démon Docker de l'HÔTE de la même façon. Si le déploiement de "db"
+# échoue sur le bind mount, il faudra soit committer db/init sur un
+# chemin absolu connu de l'hôte (ex: bind mount du répertoire hôte dans le
+# conteneur runner au même chemin), soit passer par une image Postgres
+# custom qui embarque déjà les scripts d'init au lieu d'un bind mount. Pas
+# bloquant pour api/dashboard (aucun bind mount).
