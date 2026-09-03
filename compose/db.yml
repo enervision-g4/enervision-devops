@@ -3,8 +3,8 @@ name: g4-db
 services:
   db:
     image: timescale/timescaledb:latest-pg16
-    container_name: g4_db
-    restart: unless-stopped 
+    container_name: g4_db_${STAGE}
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -22,7 +22,7 @@ services:
 
 volumes:
   g4_db_data:
-    name: g4_db_data
+    name: g4_db_data_${STAGE}
 
 networks:
   g4_net:
