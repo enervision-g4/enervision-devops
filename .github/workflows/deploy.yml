@@ -30,7 +30,7 @@ on:
         required: true
         type: string
       stage:
-        description: "dev ou prod — choisit le runner et l'environnement onprem-<stage>"
+        description: "dev ou prod — choisit le runner, l'environnement onprem-<stage>, et suffixe les ressources Docker"
         required: true
         type: string
       image:
@@ -54,15 +54,19 @@ jobs:
         env:
           ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
           IMAGE: ${{ inputs.image }}
+          STAGE: ${{ inputs.stage }}
         run: |
           set -euo pipefail
-          TARGET_DIR="/opt/g4/${{ inputs.service }}"
+          TARGET_DIR="/opt/g4/${{ inputs.service }}-${{ inputs.stage }}"
           sudo mkdir -p "$TARGET_DIR"
           sudo cp "compose/${{ inputs.service }}.yml" "$TARGET_DIR/"
           sudo cp -r db/init "$TARGET_DIR/db-init" 2>/dev/null || true
 
           printf '%s\n' "$ENV_FILE_CONTENTS" | sudo tee "$TARGET_DIR/.env" > /dev/null
-          echo "IMAGE=$IMAGE" | sudo tee -a "$TARGET_DIR/.env" > /dev/null
+          {
+            echo "IMAGE=$IMAGE"
+            echo "STAGE=$STAGE"
+          } | sudo tee -a "$TARGET_DIR/.env" > /dev/null
 
           docker network create g4_net 2>/dev/null || true
           cd "$TARGET_DIR"
@@ -76,7 +80,6 @@ jobs:
 # relatif checké out DANS le runner n'est pas forcément résolu par le
 # démon Docker de l'HÔTE de la même façon. Si le déploiement de "db"
 # échoue sur le bind mount, il faudra soit committer db/init sur un
-# chemin absolu connu de l'hôte (ex: bind mount du répertoire hôte dans le
-# conteneur runner au même chemin), soit passer par une image Postgres
-# custom qui embarque déjà les scripts d'init au lieu d'un bind mount. Pas
-# bloquant pour api/dashboard (aucun bind mount).
+# chemin absolu connu de l'hôte, soit passer par une image Postgres custom
+# qui embarque déjà les scripts d'init. Pas bloquant pour api/dashboard
+# (aucun bind mount).
