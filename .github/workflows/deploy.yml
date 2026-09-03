@@ -50,7 +50,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout enervision-devops
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Copy compose file + init scripts to target
         uses: appleboy/scp-action@v0.1.7
