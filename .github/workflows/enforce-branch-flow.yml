@@ -14,7 +14,7 @@ on:
         default: 'develop'
       dev_allowed_patterns:
         type: string
-        default: 'feature/* fix/* chore/*'
+        default: 'feature/* fix/* chore/* dependabot/*'
 
 jobs:
   check-source-branch:
