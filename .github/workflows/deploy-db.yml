@@ -1,0 +1,21 @@
+name: Deploy DB
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "Environnement cible"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      service: db
+      stage: ${{ inputs.stage }}
+      image: unused
+    secrets: inherit
