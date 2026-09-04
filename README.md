@@ -41,6 +41,35 @@ service (`compose/db.yml` a la même forme que `compose/api.yml`,
 └── db/init/                       # scripts d'initialisation SQL (service db uniquement)
 ```
 
+## Lancer la pile en local
+
+Le workflow de déploiement copie le fichier compose et le `.env` dans un répertoire
+dédié, puis lance `docker compose` depuis ce répertoire. En local, les fichiers restent
+à leur place et il faut le dire à compose, sinon **deux choses cassent en silence** :
+
+- `-f compose/db.yml` place le répertoire de projet dans `compose/`. Compose y cherche
+  le `.env`, ne le trouve pas, et démarre des conteneurs avec toutes les variables
+  vides — une base sans mot de passe ni schéma, sans le moindre message d'erreur.
+- Le bind mount `./db/init` de `db.yml` se résout alors en `compose/db/init`, qui
+  n'existe pas. Docker crée un dossier vide et aucun script d'initialisation ne
+  s'exécute : la base démarre sans aucune table.
+
+D'où les deux options, à ne pas oublier :
+
+```bash
+docker compose --env-file .env --project-directory . -f compose/db.yml up -d
+docker compose --env-file .env --project-directory . -f compose/kafka.yml up -d
+docker compose --env-file .env --project-directory . -f compose/etl.yml up -d
+docker compose --env-file .env --project-directory . -f compose/consumer-persistence.yml up -d
+docker compose --env-file .env --project-directory . -f compose/consumer-alerting.yml up -d
+```
+
+Le `.env` local doit porter en plus `STAGE` et `IMAGE`, que le workflow ajoute lui-même
+au moment du déploiement.
+
+Aucun avertissement `variable is not set` ne doit apparaître. S'il en reste un, une
+variable manque réellement.
+
 ## Principe général
 
 1. Chaque service a son propre dépôt, son propre `Dockerfile`, et son
