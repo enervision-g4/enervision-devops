@@ -55,6 +55,16 @@ jobs:
     steps:
       - name: Checkout enervision-devops
         uses: actions/checkout@v7
+        with:
+          # Sans "repository:" explicite, actions/checkout récupère
+          # ${{ github.repository }}, c'est-à-dire le repo qui a DÉCLENCHÉ
+          # le run (ex. enervision-api), pas celui qui possède ce workflow
+          # réutilisable. Ça marchait par coïncidence pour "Deploy DB"
+          # (déclenché directement dans ce repo, uses: ./...), mais casse
+          # dès qu'un autre repo (api, dashboard...) appelle ce workflow :
+          # compose/<service>.yml n'existe pas dans leur checkout.
+          repository: enervision-g4/enervision-devops
+          ref: main
 
       - name: Write .env and deploy
         env:
