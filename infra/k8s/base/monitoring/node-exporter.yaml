@@ -1,0 +1,71 @@
+---
+# Métriques de la machine : CPU, mémoire, disque, charge.
+#
+# Un simple Deployment et non un DaemonSet : le cluster n'a qu'un nœud.
+# Un DaemonSet ne servirait que s'il y avait plusieurs machines, et
+# obligerait à gérer les tolérations et les collisions de ports entre les
+# deux stages qui partagent ce nœud.
+#
+# node-exporter lit /proc et /sys de l'hôte, montés en lecture seule.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g4-node-exporter
+  labels:
+    app.kubernetes.io/name: node-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-exporter
+    spec:
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.8.2
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+          ports:
+            - name: metrics
+              containerPort: 9100
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: g4-node-exporter
+  labels:
+    app.kubernetes.io/name: node-exporter
+spec:
+  selector:
+    app.kubernetes.io/name: node-exporter
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100

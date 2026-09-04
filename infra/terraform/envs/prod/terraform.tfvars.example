@@ -1,0 +1,13 @@
+# cp terraform.tfvars.example terraform.tfvars puis adapter.
+# terraform.tfvars est ignoré par Git (infra/terraform/.gitignore).
+
+location = "francecentral"
+
+# 3-24 caractères, minuscules et chiffres, unique dans tout Azure.
+storage_account_name = "g4backupprodXXXX"
+
+# Object IDs (az ad sp show --id <appId> --query id -o tsv) des identités
+# qui écrivent / lisent les sauvegardes. Laisser vide tant que restic
+# utilise la clé de compte.
+backup_writer_principal_ids = []
+backup_reader_principal_ids = []

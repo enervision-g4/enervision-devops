@@ -1,8 +1,3 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -10,3 +5,26 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: "develop"
+    groups:
+      actions-minor:
+        update-types: ["minor", "patch"]
+
+  # Images des manifestes Kubernetes
+  - package-ecosystem: "docker"
+    directory: "/infra/k8s"
+    schedule:
+      interval: "weekly"
+    target-branch: "develop"
+    groups:
+      k8s-images-minor:
+        update-types: ["minor", "patch"]
+
+  # Providers et modules Terraform.
+  - package-ecosystem: "terraform"
+    directory: "/infra/terraform"
+    schedule:
+      interval: "weekly"
+    target-branch: "develop"
+    groups:
+      terraform-minor:
+        update-types: ["minor", "patch"]

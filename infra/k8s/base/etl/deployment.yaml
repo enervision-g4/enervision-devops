@@ -1,0 +1,38 @@
+---
+# Collecteur de données : lit l'API Mock, publie sur Kafka.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g4-etl
+  labels:
+    app.kubernetes.io/name: etl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: etl
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: etl
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: etl
+          image: ghcr.io/enervision-g4/enervision-etl:placeholder
+          ports:
+            - name: metrics
+              containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: g4-env
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false

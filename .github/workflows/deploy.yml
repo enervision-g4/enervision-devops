@@ -1,83 +1,51 @@
 name: Deploy service
 
-# Workflow réutilisable, appelé depuis les dépôts de service
-# (enervision-api, enervision-etl, enervision-ml, ...) via :
+# Workflow réutilisable appelé par les dépôts de service (enervision-api, enervision-etl, ...).
 #
 #   jobs:
 #     deploy:
-#       uses: <org>/enervision-devops/.github/workflows/deploy.yml@main
+#       uses: enervision-g4/enervision-devops/.github/workflows/deploy.yml@main
 #       with:
 #         service: api
 #         environment: onprem
-#         image: ghcr.io/<org>/enervision-api:${{ github.sha }}
+#         image: ghcr.io/enervision-g4/enervision-api:${{ github.sha }}
 #       secrets: inherit
 #
-# Ce fichier ne connaît rien de spécifique à un service : il se contente
-# de lancer `docker compose -f compose/<service>.yml up -d` avec le
-# `.env` de l'environnement demandé, sur la machine cible.
 
 on:
   workflow_call:
     inputs:
       service:
-        description: "Nom du service (correspond à compose/<service>.yml)"
+        description: "Nom du service (correspond à infra/k8s/base/<service>/)"
         required: true
         type: string
       environment:
-        description: "Environnement cible (onprem, azure, ovh...)"
+        description: "Préfixe d'Environment GitHub (onprem, ...)"
         required: true
         type: string
       image:
         description: "Image Docker complète (avec tag) à déployer"
         required: true
         type: string
-    secrets:
-      SSH_HOST:
-        required: true
-      SSH_USER:
-        required: true
-      SSH_PRIVATE_KEY:
-        required: true
-      SSH_PORT:
-        required: true
-      ENV_FILE_CONTENTS:
-        description: "Contenu du .env de l'environnement cible (secret GitHub par environnement)"
-        required: true
+      stage:
+        description: "dev ou prod. Vide = déduit de la branche appelante."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - name: Checkout enervision-devops
-        uses: actions/checkout@v4
-
-      - name: Copy compose file + init scripts to target
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: "compose/${{ inputs.service }}.yml,db/init/*"
-          target: "/opt/g4/${{ inputs.service }}"
-
-      - name: Write .env and deploy over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          envs: IMAGE
-          script: |
-            mkdir -p /opt/g4/${{ inputs.service }}
-            cat > /opt/g4/${{ inputs.service }}/.env << 'EOF'
-            ${{ secrets.ENV_FILE_CONTENTS }}
-            IMAGE=${{ inputs.image }}
-            EOF
-            docker network create g4_net 2>/dev/null || true
-            cd /opt/g4/${{ inputs.service }}
-            docker compose -f compose/${{ inputs.service }}.yml pull
-            docker compose -f compose/${{ inputs.service }}.yml up -d
-            docker image prune -f
+    uses: ./.github/workflows/deploy-k8s.yml
+    with:
+      stage: >-
+        ${{ inputs.stage != ''
+            && inputs.stage
+            || ((github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+                && 'prod' || 'dev') }}
+      environment_prefix: ${{ inputs.environment }}
+      service: ${{ inputs.service }}
+      image: ${{ inputs.image }}
+    secrets: inherit

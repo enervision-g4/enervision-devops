@@ -1,0 +1,21 @@
+---
+# Réglages non sensibles, communs aux deux inventaires.
+g4_base_dir: /opt/g4
+g4_bin_dir: /opt/g4/bin
+g4_stages:
+  - dev
+  - prod
+
+# Utilisateur applicatif : celui qui possède /opt/g4 et le kubeconfig.
+g4_deploy_user: "{{ lookup('ansible.builtin.env', 'G4_SSH_USER') | default('enervision-g4', true) }}"
+
+# ── Secrets ───────────────────────────────────────────────────────────
+g4_deploy_pubkey: "{{ lookup('ansible.builtin.env', 'DEPLOY_PUBKEY') }}"
+
+g4_restic_repository: "{{ lookup('ansible.builtin.env', 'RESTIC_REPOSITORY') }}"
+g4_restic_password: "{{ lookup('ansible.builtin.env', 'RESTIC_PASSWORD') }}"
+g4_azure_account_name: "{{ lookup('ansible.builtin.env', 'AZURE_ACCOUNT_NAME') }}"
+g4_azure_account_key: "{{ lookup('ansible.builtin.env', 'AZURE_ACCOUNT_KEY') }}"
+g4_postgres_user: "{{ lookup('ansible.builtin.env', 'POSTGRES_USER') }}"
+g4_postgres_password: "{{ lookup('ansible.builtin.env', 'POSTGRES_PASSWORD') }}"
+g4_postgres_db: "{{ lookup('ansible.builtin.env', 'POSTGRES_DB') }}"

@@ -1,0 +1,9 @@
+# cp backend.hcl.example backend.hcl  (ignoré par Git)
+# Valeurs produites par ../../bootstrap (output backend_config).
+#
+#   terraform init -backend-config=backend.hcl
+
+resource_group_name  = "g4-tfstate"
+storage_account_name = "g4tfstateXXXX"
+container_name       = "tfstate"
+key                  = "prod/terraform.tfstate"

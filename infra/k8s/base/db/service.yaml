@@ -1,0 +1,18 @@
+---
+# Nom DNS interne de la base : "g4-db" (avec un tiret — un underscore est
+# interdit dans un nom DNS, cf RFC 1123 ; c'est la seule différence de
+# forme avec le .env du chemin Compose, voir envs/k3s.env.example).
+apiVersion: v1
+kind: Service
+metadata:
+  name: g4-db
+  labels:
+    app.kubernetes.io/name: db
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

@@ -1,0 +1,30 @@
+---
+# Sauvegarde à la demande, depuis l'hôte.
+#
+#   ansible-playbook -i inventories/onprem.ini playbooks/backup.yml \
+#     -e db_backup_agent_stage=prod
+#
+# Utile avant une opération risquée (migration de schéma, montée de
+# version de la base) : le CronJob Kubernetes tourne une fois par nuit,
+# ce playbook déclenche un instantané tout de suite.
+
+- name: Take an on-demand encrypted backup
+  hosts: backup_agents
+  become: true
+  roles:
+    - db_backup_agent
+
+  tasks:
+    - name: Run the backup now
+      ansible.builtin.shell:
+        cmd: >-
+          set -a; . {{ db_backup_agent_env_file }}; set +a;
+          {{ g4_bin_dir }}/db-backup-to-azure.sh all
+        executable: /bin/bash
+      register: backup_run
+      changed_when: backup_run.rc == 0
+      no_log: true
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: "Sauvegarde {{ db_backup_agent_stage }} terminée."

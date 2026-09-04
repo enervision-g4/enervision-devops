@@ -1,0 +1,106 @@
+name: Deploy dev
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "infra/k8s/**"
+      - "db/init/**"
+      - "scripts/**"
+      - ".github/workflows/deploy-dev.yml"
+      - ".github/workflows/deploy-k8s.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-k8s.yml
+    with:
+      stage: dev
+    secrets: inherit
+
+  checks:
+    name: non-functional-checks
+    needs: deploy
+    runs-on: [self-hosted, dev]
+    environment: onprem-dev
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+    steps:
+      - name: Prepare the SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$RUNNER_TEMP/ssh"
+          install -m 600 /dev/null "$RUNNER_TEMP/ssh/id_deploy"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/id_deploy"
+          # Options SSH communes aux deux contrôles ci-dessous.
+          echo "SSH_OPTS=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $RUNNER_TEMP/ssh/id_deploy -p $SSH_PORT" >> "$GITHUB_ENV"
+
+      - name: k6 load check
+        # Bloquant. 10 utilisateurs simultanés pendant 30 s. Les seuils
+        # sont délibérément larges : ils détectent une régression
+        # grossière — base saturée, pool de connexions épuisé — sans
+        # transformer une machine d'école partagée en source de faux
+        # positifs.
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" 'bash -s' <<'EOS' | tee k6-report.txt
+          set -euo pipefail
+          cat > /tmp/g4-load.js <<'JS'
+          import http from 'k6/http';
+          import { check } from 'k6';
+
+          export const options = {
+            vus: 10,
+            duration: '30s',
+            thresholds: {
+              http_req_duration: ['p(95)<500'],
+              http_req_failed: ['rate<0.01'],
+            },
+          };
+
+          export default function () {
+            const res = http.get('http://g4-api:3000/health');
+            check(res, { 'status 200': (r) => r.status === 200 });
+          }
+          JS
+          kubectl -n g4-dev run "k6-$RANDOM" \
+            --rm --restart=Never --quiet --attach --stdin \
+            --image=grafana/k6:0.55.0 \
+            --command -- k6 run - < /tmp/g4-load.js
+          EOS
+
+      - name: OWASP ZAP baseline scan
+        # Informatif (cf docs/cicd/quality-gates.md) : un baseline ZAP
+        # remonte surtout des en-têtes manquants sur une API de cette
+        # taille. Lancé DANS le cluster contre le Service ClusterIP :
+        # l'API n'a pas à être exposée sur Internet pour être auditée.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" 'bash -s' <<'EOS' | tee zap-baseline-report.txt
+          set -euo pipefail
+          kubectl -n g4-dev run "zap-$RANDOM" \
+            --rm --restart=Never --quiet --attach \
+            --image=ghcr.io/zaproxy/zaproxy:stable \
+            --command -- zap-baseline.py -t http://g4-api:3000 -m 2 -I
+          EOS
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: non-functional-reports
+          path: |
+            k6-report.txt
+            zap-baseline-report.txt
+          if-no-files-found: warn
+          retention-days: 30

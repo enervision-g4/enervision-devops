@@ -1,0 +1,117 @@
+---
+# Prometheus : interroge périodiquement les endpoints /metrics listés
+# ci-dessous et conserve les valeurs pendant 15 jours.
+#
+# La liste des cibles est ÉCRITE EN DUR, volontairement. Prometheus sait
+# découvrir tout seul les pods d'un cluster, mais cela demande un compte
+# de service, des droits RBAC et des règles de réétiquetage — beaucoup de
+# machinerie pour un cluster qui héberge six composants connus d'avance.
+# Trois adresses fixes font le même travail et se lisent d'un coup d'œil.
+#
+# Les noms courts (g4-node-exporter, g4-etl-metrics) suffisent : Prometheus
+# tourne dans le même namespace, le DNS interne de Kubernetes les résout.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: g4-prometheus-config
+  labels:
+    app.kubernetes.io/name: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      - job_name: node
+        static_configs:
+          - targets: ["g4-node-exporter:9100"]
+
+      # Le collecteur expose ses métriques métier via prometheus-client.
+      - job_name: etl
+        static_configs:
+          - targets: ["g4-etl-metrics:8000"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g4-prometheus
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus
+    spec:
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsNonRoot: true
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=15d
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          configMap:
+            name: g4-prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: g4-prometheus-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: g4-prometheus-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: g4-prometheus
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  selector:
+    app.kubernetes.io/name: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090

@@ -1,0 +1,64 @@
+---
+# Installe de quoi sauvegarder ET restaurer depuis l'hôte, sans passer
+# par le cluster.
+#
+# Raison d'être : le CronJob Kubernetes couvre le fonctionnement normal,
+# mais une restauration se fait précisément quand quelque chose est
+# cassé — potentiellement k3s lui-même. Les outils doivent exister en
+# dehors du cluster.
+
+- name: Install restic and the PostgreSQL client
+  ansible.builtin.apt:
+    name:
+      - restic
+      - postgresql-client
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the binaries and configuration directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ g4_bin_dir }}", owner: "{{ g4_deploy_user }}", mode: "0755" }
+    - { path: "/etc/g4", owner: "root", mode: "0750" }
+
+- name: Install the backup and restore scripts
+  # Mêmes fichiers que ceux montés dans le CronJob Kubernetes : une seule
+  # logique de sauvegarde existe, quel que soit le chemin d'exécution.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../scripts/{{ item }}"
+    dest: "{{ g4_bin_dir }}/{{ item }}"
+    owner: "{{ g4_deploy_user }}"
+    group: "{{ g4_deploy_user }}"
+    mode: "0755"
+  loop:
+    - db-backup-to-azure.sh
+    - db-restore-drill.sh
+
+- name: Require the backup credentials
+  ansible.builtin.assert:
+    that:
+      - g4_restic_repository | length > 0
+      - g4_restic_password | length > 0
+      - g4_azure_account_name | length > 0
+      - g4_azure_account_key | length > 0
+      - g4_postgres_user | length > 0
+      - g4_postgres_db | length > 0
+    fail_msg: >-
+      Exporter RESTIC_REPOSITORY, RESTIC_PASSWORD, AZURE_ACCOUNT_NAME,
+      AZURE_ACCOUNT_KEY, POSTGRES_USER, POSTGRES_PASSWORD et POSTGRES_DB
+      (secrets de l'Environment GitHub onprem-{{ db_backup_agent_stage }}).
+
+- name: Write the backup environment file
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: "{{ db_backup_agent_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true

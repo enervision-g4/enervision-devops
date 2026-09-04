@@ -1,0 +1,12 @@
+# Rien de ce qui suit ne doit entrer dans Git : l'état contient les
+# secrets en clair, les .tfvars contiennent les identifiants.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+terraform.tfvars
+*.auto.tfvars
+backend.hcl

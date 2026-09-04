@@ -1,0 +1,14 @@
+---
+# Installe uniquement le cluster k3s, sans toucher au pare-feu ni à
+# l'outillage de sauvegarde.
+#
+#   ansible-playbook -i inventories/onprem.ini playbooks/bootstrap-cluster.yml
+#
+# C'est le playbook à lancer en premier sur le serveur de l'école : rien
+# ne se déploie tant que le cluster n'existe pas
+
+- name: Install the k3s control plane
+  hosts: k3s_servers
+  become: true
+  roles:
+    - k3s_server

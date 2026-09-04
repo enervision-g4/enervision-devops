@@ -1,0 +1,9 @@
+---
+db_backup_agent_env_file: /etc/g4/backup.env
+db_backup_agent_stage: prod
+
+# pg_dump doit joindre la base. Depuis l'hôte, le Service ClusterIP n'est
+# pas résolvable : passer par un port-forward, ou renseigner ici l'IP
+# exposée. Voir docs/cicd/runbook.md.
+db_backup_agent_pghost: "127.0.0.1"
+db_backup_agent_pgport: "5432"

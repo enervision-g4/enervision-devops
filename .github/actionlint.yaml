@@ -1,0 +1,7 @@
+# Étiquettes des runners self-hosted du projet, déclarées pour que
+# actionlint cesse de les signaler comme inconnues.
+
+self-hosted-runner:
+  labels:
+    - dev
+    - prod
