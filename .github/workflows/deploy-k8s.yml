@@ -1,0 +1,156 @@
+name: Deploy to k3s
+
+# Workflow RÉUTILISABLE : déploie un stage (namespace) sur le cluster k3s
+# on-premise. Appelé par deploy.yml (déploiement d'un service depuis son
+# dépôt), deploy-dev.yml et deploy-prod.yml (déploiement des manifestes
+# que ce dépôt possède : base de données, Kafka, supervision, sauvegarde).
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: "dev ou prod — choisit le namespace g4-<stage>, le runner et l'Environment"
+        required: true
+        type: string
+      environment_prefix:
+        description: "Préfixe d'Environment GitHub. L'Environment utilisé est <prefix>-<stage>."
+        required: false
+        default: "onprem"
+        type: string
+      service:
+        description: "Service dont l'image est épinglée. Vide = déploiement complet du stage."
+        required: false
+        default: ""
+        type: string
+      image:
+        description: "Image complète à épingler pour ce service."
+        required: false
+        default: ""
+        type: string
+    secrets:
+      # Déclarés non obligatoires à dessein : ces valeurs vivent dans les
+      # secrets d'*Environment*, qui ne sont résolus que dans un job
+      # portant cet `environment:`. Les marquer obligatoires ferait
+      # échouer la validation à l'appel, avant même que l'Environment soit
+      # connu. Le contrôle est fait à l'exécution, première étape du job.
+      SSH_HOST:
+        required: false
+      SSH_USER:
+        required: false
+      SSH_PRIVATE_KEY:
+        required: false
+      SSH_PORT:
+        required: false
+      ENV_FILE_CONTENTS:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: [self-hosted, "${{ inputs.stage }}"]
+    environment: ${{ inputs.environment_prefix }}-${{ inputs.stage }}
+    concurrency:
+      # Deux déploiements simultanés sur le même namespace se marcheraient
+      # dessus : kustomize edit puis kubectl apply n'est pas atomique.
+      group: deploy-k8s-${{ inputs.stage }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout enervision-devops
+        uses: actions/checkout@v7
+
+      - name: Check the inputs and the secrets
+        env:
+          STAGE: ${{ inputs.stage }}
+          ENVIRONMENT: ${{ inputs.environment_prefix }}-${{ inputs.stage }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
+        run: |
+          set -euo pipefail
+          case "$STAGE" in
+            dev|prod) ;;
+            *) echo "::error::stage doit valoir dev ou prod (reçu '$STAGE')"; exit 1 ;;
+          esac
+          missing=""
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY ENV_FILE_CONTENTS; do
+            eval "value=\${$name:-}"
+            [ -n "$value" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Secrets absents de l'Environment '$ENVIRONMENT' :$missing"
+            echo "Les définir dans Settings > Environments > $ENVIRONMENT (cf docs/cicd/runbook.md, section 1.3)."
+            exit 1
+          fi
+
+      - name: Prepare the SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$RUNNER_TEMP/ssh"
+          install -m 600 /dev/null "$RUNNER_TEMP/ssh/id_deploy"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/id_deploy"
+
+      - name: Ship the repository to the host
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          # Seulement ce dont le déploiement a besoin : manifestes, SQL
+          # d'initialisation, scripts. Ni .git, ni secrets.
+          tar -czf - infra/k8s db/init scripts \
+            | ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                  -i "$RUNNER_TEMP/ssh/id_deploy" -p "$SSH_PORT" \
+                  "$SSH_USER@$SSH_HOST" \
+                  'set -e; rm -rf /opt/g4/repo; mkdir -p /opt/g4/repo; tar -xzf - -C /opt/g4/repo'
+
+      - name: Apply the stage
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
+          STAGE: ${{ inputs.stage }}
+          SERVICE: ${{ inputs.service }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          # Le contenu du .env passe par stdin, jamais par la ligne de
+          # commande : un argument distant serait visible dans le `ps` de
+          # l'hôte le temps de l'exécution.
+          printf '%s' "$ENV_FILE_CONTENTS" | base64 -w0 \
+            | ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                  -i "$RUNNER_TEMP/ssh/id_deploy" -p "$SSH_PORT" \
+                  "$SSH_USER@$SSH_HOST" \
+                  "set -euo pipefail
+                   ENV_FILE_CONTENTS=\$(cat | base64 -d)
+                   export ENV_FILE_CONTENTS
+                   cd /opt/g4/repo
+                   ./scripts/k8s-apply.sh '$STAGE' '$SERVICE' '$IMAGE'"
+
+      - name: Smoke test the deployed API
+        # Contrôle non fonctionnel : le rollout peut être « réussi » alors
+        # que l'application répond 500. On interroge /health depuis
+        # l'intérieur du cluster — pas de dépendance à l'Ingress ni au DNS.
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          STAGE: ${{ inputs.stage }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              -i "$RUNNER_TEMP/ssh/id_deploy" -p "$SSH_PORT" \
+              "$SSH_USER@$SSH_HOST" \
+              "set -euo pipefail
+               kubectl -n 'g4-$STAGE' run 'smoke-\$RANDOM' \
+                 --rm --restart=Never --quiet --attach \
+                 --image=curlimages/curl:8.11.1 -- \
+                 --fail --show-error --silent --max-time 10 \
+                 http://g4-api:3000/health"

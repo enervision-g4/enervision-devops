@@ -1,0 +1,31 @@
+extends: default
+
+ignore: |
+  .terraform/
+  infra/k8s/**/kustomization.yaml.bak
+
+rules:
+  line-length:
+    max: 160
+    level: error
+
+  # Les workflows GitHub Actions ne commencent pas par "---" et n'ont pas
+  # à le faire : on n'impose donc rien dans un sens ni dans l'autre.
+  document-start: disable
+
+  # "on:" est la clé de déclenchement de tout workflow GitHub Actions.
+  # yamllint la lit comme le booléen YAML 1.1 "on" — c'est un faux positif
+  # sur chaque fichier de .github/workflows/.
+  truthy:
+    allowed-values: ["true", "false", "on"]
+
+  comments:
+    min-spaces-from-content: 1
+
+  braces:
+    max-spaces-inside: 1
+
+  # Les manifestes Kubernetes indentent couramment les listes au même
+  # niveau que leur clé ; les playbooks Ansible aussi.
+  indentation:
+    indent-sequences: consistent

@@ -1,0 +1,18 @@
+---
+# Service dédié aux métriques : enervision-etl dépend de prometheus-client,
+# donc il expose un endpoint /metrics. Le port ci-dessous (8000, défaut de
+# prometheus_client.start_http_server) est à ajuster si le collecteur en
+# choisit un autre — c'est la seule hypothèse faite ici sur son code.
+apiVersion: v1
+kind: Service
+metadata:
+  name: g4-etl-metrics
+  labels:
+    app.kubernetes.io/name: etl
+spec:
+  selector:
+    app.kubernetes.io/name: etl
+  ports:
+    - name: metrics
+      port: 8000
+      targetPort: 8000

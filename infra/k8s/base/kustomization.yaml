@@ -1,0 +1,27 @@
+---
+# Base commune aux deux namespaces (g4-dev / g4-prod).
+#
+# Aucun namespace, aucun hostname, aucun secret ici : tout ce qui diffère
+# d'un stage à l'autre est dans overlays/<stage>/. Les images portent un
+# tag "placeholder" que `kustomize edit set image` réécrit au moment du
+# déploiement (cf .github/workflows/deploy-k8s.yml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Forme moderne de commonLabels : includeSelectors=false évite d'écrire
+# le label dans les selectors, qui sont immuables une fois l'objet créé.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: enervision
+    includeSelectors: false
+
+resources:
+  - db
+  - kafka
+  - api
+  - dashboard
+  - etl
+  - messager-consumer
+  - monitoring
+  - backup
+  - ingress

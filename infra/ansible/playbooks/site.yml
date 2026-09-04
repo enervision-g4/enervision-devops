@@ -1,0 +1,28 @@
+---
+# Provisionnement complet d'un hôte, de zéro à prêt-à-déployer.
+#
+#   ansible-playbook -i inventories/onprem.ini playbooks/site.yml
+#
+# Le même playbook vise une VM Azure ou n'importe quelle machine Linux en
+# changeant le seul inventaire :
+#
+#   ansible-playbook -i inventories/azure.ini playbooks/site.yml
+#
+# Idempotent : relançable sans risque, ne recrée rien qui existe déjà.
+#
+# Les runners GitHub self-hosted ne sont pas gérés ici : ils tournent
+# depuis infra/runners/docker-compose.runners.yml, montés une fois à la
+# main. Les envelopper dans un rôle Ansible n'aurait fait que déguiser un
+# `docker compose up -d`.
+
+- name: Install the k3s control plane
+  hosts: k3s_servers
+  become: true
+  roles:
+    - k3s_server
+
+- name: Install the backup and restore tooling
+  hosts: backup_agents
+  become: true
+  roles:
+    - db_backup_agent

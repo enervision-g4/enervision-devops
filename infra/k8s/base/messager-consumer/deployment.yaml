@@ -1,0 +1,35 @@
+---
+# Consommateurs Kafka : persistance + alerting.
+#
+# Pas de Service : ce composant ne reçoit aucun trafic entrant, il
+# consomme le bus.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g4-messager-consumer
+  labels:
+    app.kubernetes.io/name: messager-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: messager-consumer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: messager-consumer
+    spec:
+      containers:
+        - name: messager-consumer
+          image: ghcr.io/enervision-g4/enervision-messager-consumer:placeholder
+          envFrom:
+            - secretRef:
+                name: g4-env
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false

@@ -1,0 +1,61 @@
+---
+# Stage prod — namespace g4-prod.
+#
+# Deux replicas sur les composants sans état (api, dashboard) : c'est ce
+# qui rend le rolling update réellement sans coupure, maxUnavailable
+# valant 0. etl et messager-consumer restent à 1 replica — les dupliquer
+# doublerait la collecte et la consommation, ce n'est pas de la
+# scalabilité, c'est un bug.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: g4-prod
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      enervision.io/stage: prod
+    includeSelectors: false
+
+images:
+  - name: ghcr.io/enervision-g4/enervision-api
+    newTag: placeholder
+  - name: ghcr.io/enervision-g4/enervision-dashboard
+    newTag: placeholder
+  - name: ghcr.io/enervision-g4/enervision-etl
+    newTag: placeholder
+  - name: ghcr.io/enervision-g4/enervision-messager-consumer
+    newTag: placeholder
+
+patches:
+  - target:
+      kind: Ingress
+      name: g4-ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: enervision.local
+  - target:
+      kind: Deployment
+      name: g4-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target:
+      kind: Deployment
+      name: g4-dashboard
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target:
+      kind: StatefulSet
+      name: g4-db
+    patch: |
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 20Gi

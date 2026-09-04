@@ -1,0 +1,95 @@
+---
+# Bus de messages Kafka, mode KRaft (pas de ZooKeeper), nœud unique qui
+# cumule les rôles broker et controller.
+#
+# Comble un manque réel : l'architecture décrit un bus Kafka et
+# KAFKA_BROKERS est référencé par etl et messager-consumer, mais aucun
+# broker n'était déployé nulle part.
+#
+# Nœud unique = facteur de réplication 1 partout. Suffisant pour un
+# serveur unique ; pour de la vraie tolérance de panne il faut 3 nœuds et
+# un replication factor de 3 (voir docs/cicd/runbook.md).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: g4-kafka
+  labels:
+    app.kubernetes.io/name: kafka
+spec:
+  serviceName: g4-kafka-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          ports:
+            - name: broker
+              containerPort: 9092
+            - name: controller
+              containerPort: 9093
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://g4-kafka:9092"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@g4-kafka-0.g4-kafka-headless:9093"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: KAFKA_LOG_DIRS
+              value: "/var/lib/kafka/data"
+            - name: CLUSTER_ID
+              value: "g4EnerVisionKRaft01"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

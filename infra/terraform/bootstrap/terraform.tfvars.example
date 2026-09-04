@@ -1,0 +1,6 @@
+# cp terraform.tfvars.example terraform.tfvars puis adapter.
+
+location             = "francecentral"
+resource_group_name  = "g4-tfstate"
+storage_account_name = "g4tfstateXXXX"
+container_name       = "tfstate"

@@ -1,0 +1,119 @@
+---
+# Installe et configure le nœud serveur k3s.
+#
+# Idempotent : l'installation est protégée par `creates`, la création des
+# namespaces tolère "already exists", et le téléchargement de kustomize
+# est conditionné à l'absence du binaire.
+
+- name: Install the k3s prerequisites
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - open-iscsi
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Check whether k3s is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_server_binary
+
+- name: Download the k3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/src/k3s-install.sh
+    mode: "0755"
+  when: not k3s_server_binary.stat.exists
+
+- name: Install the k3s server
+  ansible.builtin.command:
+    cmd: /usr/local/src/k3s-install.sh
+    creates: /usr/local/bin/k3s
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_server_version }}"
+    INSTALL_K3S_EXEC: >-
+      server
+      --write-kubeconfig-mode {{ k3s_server_kubeconfig_mode }}
+      {% for c in k3s_server_disable_components %}--disable {{ c }} {% endfor %}
+
+- name: Ensure the k3s service is enabled and running
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+
+- name: Wait for the Kubernetes API to answer
+  ansible.builtin.command: k3s kubectl get --raw /readyz
+  register: k3s_server_readyz
+  changed_when: false
+  retries: 30
+  delay: 5
+  until: k3s_server_readyz.rc == 0
+
+- name: Provide a plain "kubectl" command
+  ansible.builtin.file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/kubectl
+    state: link
+
+- name: Check whether kustomize is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/kustomize
+  register: k3s_server_kustomize_binary
+
+- name: Install kustomize
+  # Requis par scripts/k8s-apply.sh pour épingler l'image d'un service
+  # (`kustomize edit set image`) ; kubectl sait construire un overlay mais
+  # pas le modifier.
+  vars:
+    kustomize_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+    kustomize_base_url: https://github.com/kubernetes-sigs/kustomize/releases/download
+    kustomize_release: "kustomize%2Fv{{ k3s_server_kustomize_version }}"
+    kustomize_tarball: "kustomize_v{{ k3s_server_kustomize_version }}_linux_{{ kustomize_arch }}.tar.gz"
+  ansible.builtin.unarchive:
+    src: "{{ kustomize_base_url }}/{{ kustomize_release }}/{{ kustomize_tarball }}"
+    dest: /usr/local/bin
+    remote_src: true
+    mode: "0755"
+    owner: root
+    group: root
+  when: not k3s_server_kustomize_binary.stat.exists
+
+- name: Create the per-stage namespaces
+  ansible.builtin.command: "kubectl create namespace {{ item }}"
+  loop: "{{ k3s_server_namespaces }}"
+  register: k3s_server_namespace_create
+  changed_when: k3s_server_namespace_create.rc == 0
+  failed_when:
+    - k3s_server_namespace_create.rc != 0
+    - '"already exists" not in k3s_server_namespace_create.stderr'
+
+- name: Create the deploy user's .kube directory
+  ansible.builtin.file:
+    path: "/home/{{ g4_deploy_user }}/.kube"
+    state: directory
+    owner: "{{ g4_deploy_user }}"
+    group: "{{ g4_deploy_user }}"
+    mode: "0700"
+
+- name: Give the deploy user a kubeconfig
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/home/{{ g4_deploy_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ g4_deploy_user }}"
+    group: "{{ g4_deploy_user }}"
+    mode: "0600"
+
+- name: Create the base directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ g4_deploy_user }}"
+    group: "{{ g4_deploy_user }}"
+    mode: "0755"
+  loop:
+    - "{{ g4_base_dir }}"
+    - "{{ g4_bin_dir }}"

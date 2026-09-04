@@ -1,0 +1,56 @@
+---
+# Stage dev — namespace g4-dev.
+#
+# Un seul replica partout, sauvegarde décalée à 04:00 et surtout
+# suspendue : on ne sauvegarde pas des données de développement, qui sont
+# jetables par définition. Il n'existe donc aucun stockage Azure pour dev
+# (cf infra/terraform/, qui ne gère que la production). Passer `suspend`
+# à false suffirait à l'activer, à condition de fournir un
+# RESTIC_REPOSITORY dans le .env du stage.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: g4-dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      enervision.io/stage: dev
+    includeSelectors: false
+
+# Réécrit par `kustomize edit set image` au moment du déploiement.
+images:
+  - name: ghcr.io/enervision-g4/enervision-api
+    newTag: placeholder
+  - name: ghcr.io/enervision-g4/enervision-dashboard
+    newTag: placeholder
+  - name: ghcr.io/enervision-g4/enervision-etl
+    newTag: placeholder
+  - name: ghcr.io/enervision-g4/enervision-messager-consumer
+    newTag: placeholder
+
+patches:
+  - target:
+      kind: Ingress
+      name: g4-ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.enervision.local
+  - target:
+      kind: CronJob
+      name: g4-db-backup
+    patch: |
+      - op: add
+        path: /spec/suspend
+        value: true
+  - target:
+      kind: PersistentVolumeClaim
+      name: g4-prometheus-data
+    patch: |
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 2Gi

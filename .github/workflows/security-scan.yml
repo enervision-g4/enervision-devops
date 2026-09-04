@@ -1,0 +1,104 @@
+name: Security scan
+
+on:
+  workflow_call:
+    inputs:
+      image-ref:
+        description: "Image à scanner. Vide = pas de scan d'image."
+        required: false
+        default: ""
+        type: string
+      scan-terraform:
+        required: false
+        default: true
+        type: boolean
+      scan-ansible:
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-scan:
+    name: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        with:
+          fetch-depth: 0
+        uses: actions/checkout@v7
+
+      # Dépendances et fichiers
+      - name: Trivy (système de fichiers)
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # Image
+      - name: Trivy (image)
+        if: inputs.image-ref != ''
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: ${{ inputs.image-ref }}
+          format: table
+          output: trivy-image.txt
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "1"
+
+      # Terraform
+      - name: checkov (Terraform)
+        if: inputs.scan-terraform && hashFiles('infra/terraform/**/*.tf') != ''
+        continue-on-error: true
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/terraform
+          framework: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: true
+
+      # Ansible
+      - name: ansible-lint
+        if: inputs.scan-ansible && hashFiles('infra/ansible/**/*.yml') != ''
+        run: |
+          pip install --quiet ansible-core ansible-lint
+          cd infra/ansible
+          ansible-galaxy collection install -r requirements.yml
+          ansible-lint --profile production . | tee ../../ansible-lint-report.txt
+
+      # Rapports
+      - name: Upload the SARIF results to GitHub Security
+        if: always() && hashFiles('trivy-fs.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      - name: Upload the security reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-reports
+          path: |
+            trivy-fs.sarif
+            trivy-image.txt
+            checkov.sarif
+            ansible-lint-report.txt
+          if-no-files-found: ignore
+          retention-days: 30

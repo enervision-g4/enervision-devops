@@ -1,0 +1,20 @@
+---
+k3s_server_version: "v1.31.4+k3s1"
+
+# Traefik (Ingress) et local-path (stockage) sont livrés d'origine avec
+# k3s. On les garde : les manifestes de infra/k8s/ s'appuient dessus
+# (ingressClassName: traefik, storageClassName: local-path). Cette liste
+# existe pour pouvoir en désactiver un si un besoin réel apparaît — la
+# laisser vide est le choix par défaut, délibéré.
+k3s_server_disable_components: []
+
+# 0644 rend le kubeconfig lisible par l'utilisateur de déploiement sans
+# sudo. Acceptable ici : la machine n'a que des comptes de l'équipe. Sur
+# un serveur multi-locataires, laisser 0600 et copier le fichier.
+k3s_server_kubeconfig_mode: "0644"
+
+k3s_server_namespaces:
+  - g4-dev
+  - g4-prod
+
+k3s_server_kustomize_version: "5.5.0"

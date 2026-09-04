@@ -1,0 +1,81 @@
+---
+# TimescaleDB.
+#
+# Le volume passe par le StorageClass "local-path" fourni d'origine par
+# k3s (données sur le disque du nœud) — on le configure, on ne le
+# remplace pas.
+#
+# Les scripts d'initialisation (db/init/*.sql) arrivent par la ConfigMap
+# "g4-db-initdb", créée à partir des fichiers du dépôt par
+# scripts/k8s-apply.sh — même source unique que le chemin Compose, pas de
+# copie du SQL dans les manifestes.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: g4-db
+  labels:
+    app.kubernetes.io/name: db
+spec:
+  serviceName: g4-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: timescale/timescaledb:2.17.2-pg16
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: g4-env
+          env:
+            # Les données vivent dans un sous-répertoire : le point de
+            # montage lui-même contient lost+found, ce qui empêche initdb.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: initdb
+          configMap:
+            name: g4-db-initdb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi

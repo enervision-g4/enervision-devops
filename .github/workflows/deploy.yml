@@ -1,110 +1,54 @@
 name: Deploy service
 
-# Workflow réutilisable, appelé depuis les dépôts de service
-# (enervision-api, enervision-etl, enervision-ml, ...) via :
+# Workflow réutilisable appelé par les dépôts de service (enervision-api, enervision-etl, ...).
 #
 #   jobs:
 #     deploy:
-#       uses: <org>/enervision-devops/.github/workflows/deploy.yml@main
+#       uses: enervision-g4/enervision-devops/.github/workflows/deploy.yml@main
 #       with:
 #         service: api
-#         stage: prod        # ou "dev"
-#         image: ghcr.io/<org>/enervision-api:${{ github.sha }}
+#         environment: onprem
+#         image: ghcr.io/enervision-g4/enervision-api:${{ github.sha }}
 #       secrets: inherit
 #
-# Le serveur on-premise n'est joignable que depuis le réseau de l'école :
-# un runner GitHub hébergé (ubuntu-latest) ne peut pas s'y connecter en SSH.
-# On s'appuie donc sur les runners self-hosted déjà en place
-# (infra/runners/), qui tournent avec le socket Docker de l'hôte monté :
-# le job s'exécute directement "sur" le serveur, pas de SSH nécessaire.
-#
-# IMPORTANT : les runners dev et prod tournent sur le MÊME hôte Docker (même
-# docker.sock). Sans distinction, deux déploiements (dev puis prod)
-# entreraient en collision sur les mêmes noms de conteneur/volume/dossier.
-# "stage" sert donc à la fois à choisir le runner (label dev/prod) ET à
-# suffixer tout ce qui pourrait collisionner : le dossier sur le serveur, et
-# (via la variable STAGE injectée dans le .env) le nom des conteneurs et des
-# volumes dans chaque compose/<service>.yml — voir compose/db.yml et
-# compose/api.yml pour le pattern (${STAGE} dans container_name et dans le
-# nom du volume).
 
 on:
   workflow_call:
     inputs:
       service:
-        description: "Nom du service (correspond à compose/<service>.yml)"
+        description: "Nom du service (correspond à infra/k8s/base/<service>/)"
         required: true
         type: string
-      stage:
-        description: "dev ou prod — choisit le runner, l'environnement onprem-<stage>, et suffixe les ressources Docker"
+      environment:
+        description: "Préfixe d'Environment GitHub (onprem, ...)"
         required: true
         type: string
       image:
         description: "Image Docker complète (avec tag) à déployer"
         required: true
         type: string
-    secrets:
-      ENV_FILE_CONTENTS:
-        description: "Contenu du .env de l'environnement cible (secret GitHub par environnement onprem-<stage>)"
-        required: true
+      stage:
+        description: "dev ou prod. Vide = déduit de la branche appelante."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
-    runs-on: [self-hosted, "${{ inputs.stage }}"]
-    environment: "onprem-${{ inputs.stage }}"
-    steps:
-      - name: Checkout enervision-devops
-        uses: actions/checkout@v7
-        with:
-          # Sans "repository:" explicite, actions/checkout récupère
-          # ${{ github.repository }}, c'est-à-dire le repo qui a DÉCLENCHÉ
-          # le run (ex. enervision-api), pas celui qui possède ce workflow
-          # réutilisable. Ça marchait par coïncidence pour "Deploy DB"
-          # (déclenché directement dans ce repo, uses: ./...), mais casse
-          # dès qu'un autre repo (api, dashboard...) appelle ce workflow :
-          # compose/<service>.yml n'existe pas dans leur checkout.
-          repository: enervision-g4/enervision-devops
-          ref: main
-
-      - name: Log in to GHCR
-        # Le "docker/login-action" dans le ci-cd.yml de chaque service
-        # n'authentifie que le runner GitHub-hosted éphémère qui build+push
-        # l'image (job "build-and-push"), pas ce runner self-hosted qui,
-        # lui, doit ensuite PULL cette même image sur le serveur. Sans ce
-        # login, "docker compose pull" échoue avec "unauthorized" (l'image
-        # est privée sur GHCR par défaut).
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Write .env and deploy
-        env:
-          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
-          IMAGE: ${{ inputs.image }}
-          STAGE: ${{ inputs.stage }}
-        run: |
-          set -euo pipefail
-          TARGET_DIR="/opt/g4/${{ inputs.service }}-${{ inputs.stage }}"
-          sudo mkdir -p "$TARGET_DIR"
-          sudo cp "compose/${{ inputs.service }}.yml" "$TARGET_DIR/"
-          sudo mkdir -p "$TARGET_DIR/db"
-          sudo cp -r db/init "$TARGET_DIR/db/init" 2>/dev/null || true
-
-          printf '%s\n' "$ENV_FILE_CONTENTS" | sudo tee "$TARGET_DIR/.env" > /dev/null
-          {
-            echo "IMAGE=$IMAGE"
-            echo "STAGE=$STAGE"
-          } | sudo tee -a "$TARGET_DIR/.env" > /dev/null
-
-          docker network create g4_net 2>/dev/null || true
-          cd "$TARGET_DIR"
-          # IMPORTANT : chaque compose/<service>.yml a un "name:" fixe (ex. "g4-db"),
-          # identique pour dev et prod. Sans -p ici, docker compose considère dev et
-          # prod comme le MÊME projet (labels com.docker.compose.project identiques)
-          # et remplace le conteneur de l'autre stage au lieu d'en créer un séparé,
-          # même si container_name diffère. -p force un projet distinct par service+stage.
-          PROJECT="g4-${{ inputs.service }}-${{ inputs.stage }}"
-          docker compose -p "$PROJECT" -f "${{ inputs.service }}.yml" pull
-          docker compose -p "$PROJECT" -f "${{ inputs.service }}.yml" up -d
-          docker image prune -f
+    uses: ./.github/workflows/deploy-k8s.yml
+    with:
+      stage: >-
+        ${{ inputs.stage != ''
+            && inputs.stage
+            || ((github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+                && 'prod' || 'dev') }}
+      environment_prefix: ${{ inputs.environment }}
+      service: ${{ inputs.service }}
+      image: ${{ inputs.image }}
+    secrets: inherit
 
 # NOTE (service "db" uniquement) : compose/db.yml monte "./db/init" en bind
 # mount. Comme le runner self-hosted tourne lui-même dans un conteneur avec

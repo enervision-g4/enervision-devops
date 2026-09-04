@@ -1,0 +1,76 @@
+name: Deploy prod
+
+# Déploie sur le namespace g4-prod les manifestes que ce dépôt possède.
+# Déclenché par une poussée sur main (donc, d'après la règle de flux de
+# branches, uniquement par la fusion d'une PR develop -> main) ou par une
+# étiquette de version.
+#
+# Une promotion vers la production n'est acceptée que si le dernier
+# passage sur dev est vert : c'est ce qui rend l'ordre
+# build -> test -> scan -> deploy réellement contraignant plutôt que
+# simplement documenté.
+#
+# Pour ajouter une validation humaine avant production : mettre des
+# "required reviewers" sur l'Environment GitHub onprem-prod. Aucune
+# modification de ce fichier n'est nécessaire.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "infra/k8s/**"
+      - "db/init/**"
+      - "scripts/**"
+      - ".github/workflows/deploy-prod.yml"
+      - ".github/workflows/deploy-k8s.yml"
+  workflow_dispatch:
+    inputs:
+      skip_dev_gate:
+        description: "Déployer même si le dernier passage sur dev a échoué (incident uniquement)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gate:
+    name: dev-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a green dev deployment
+        if: ${{ !inputs.skip_dev_gate }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          conclusion="$(gh run list \
+            --workflow "Deploy dev" \
+            --branch develop \
+            --limit 1 \
+            --json conclusion \
+            --jq '.[0].conclusion // "none"')"
+          echo "Dernier passage de « Deploy dev » : $conclusion"
+          case "$conclusion" in
+            success)
+              echo "Contrôle dev validé."
+              ;;
+            none)
+              echo "::error::Aucun passage de « Deploy dev » trouvé. Déployer d'abord sur dev, ou relancer avec skip_dev_gate."
+              exit 1
+              ;;
+            *)
+              echo "::error::Le dernier « Deploy dev » s'est terminé en '$conclusion'. Corriger dev avant de promouvoir, ou relancer avec skip_dev_gate."
+              exit 1
+              ;;
+          esac
+
+  deploy:
+    needs: gate
+    uses: ./.github/workflows/deploy-k8s.yml
+    with:
+      stage: prod
+    secrets: inherit

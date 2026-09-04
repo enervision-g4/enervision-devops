@@ -1,0 +1,40 @@
+---
+# Exposition HTTP via Traefik, l'Ingress Controller livré d'origine avec
+# k3s (on le configure, on ne le remplace pas).
+#
+# Un seul nom d'hôte, remplacé par chaque surcouche. Grafana n'est
+# volontairement PAS exposé : c'est un outil d'administration, et le
+# publier sur Internet ajouterait une surface d'attaque pour rien. On y
+# accède par un tunnel :
+#
+#   kubectl -n g4-prod port-forward svc/g4-grafana 3000:3000
+#
+# ⚠ Le nom d'hôte suppose un enregistrement DNS pointant sur le serveur.
+# Sans DNS : entrée /etc/hosts, ou Service NodePort — voir
+# docs/cicd/runbook.md, section 6.2.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: g4-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: enervision.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: g4-api
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: g4-dashboard
+                port:
+                  number: 80

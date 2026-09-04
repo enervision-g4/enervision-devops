@@ -1,0 +1,101 @@
+---
+# Sauvegarde chiffrée quotidienne de TimescaleDB vers Azure Blob.
+#
+# Choix du CronJob k8s plutôt qu'un cron hôte : tout le reste tourne déjà
+# dans le cluster, donc la sauvegarde hérite des mêmes secrets, du même
+# réseau et des mêmes journaux (`kubectl logs job/...`). Un cron hôte
+# serait un deuxième mécanisme à surveiller séparément. L'outillage hôte
+# reste néanmoins installé par le rôle Ansible db_backup_agent, comme
+# secours quand le cluster lui-même est tombé.
+#
+# Deux conteneurs parce qu'aucune image ne fournit à la fois pg_dump et
+# restic :
+#   - initContainer "dump" : image TimescaleDB (même version majeure que
+#     le serveur — pg_dump refuse de dumper un serveur plus récent que
+#     lui), écrit le dump dans un emptyDir ;
+#   - conteneur "push" : image restic, chiffre et envoie vers Azure Blob,
+#     puis applique la rétention.
+# Les deux exécutent le *même* script, scripts/db-backup-to-azure.sh,
+# monté via la ConfigMap g4-backup-script (créée par scripts/k8s-apply.sh).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: g4-db-backup
+  labels:
+    app.kubernetes.io/name: db-backup
+spec:
+  schedule: "0 2 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: db-backup
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: dump
+              image: timescale/timescaledb:2.17.2-pg16
+              command: ["/bin/sh", "/scripts/db-backup-to-azure.sh", "dump"]
+              env:
+                - name: PGHOST
+                  value: g4-db
+                - name: DUMP_PATH
+                  value: /work/g4_db.dump
+              envFrom:
+                - secretRef:
+                    name: g4-env
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          containers:
+            - name: push
+              image: restic/restic:0.17.3
+              command: ["/bin/sh", "/scripts/db-backup-to-azure.sh", "push"]
+              env:
+                - name: DUMP_PATH
+                  value: /work/g4_db.dump
+                # Le tag restic porte le namespace : les snapshots de
+                # g4-dev et g4-prod ne se mélangent jamais, y compris
+                # quand les deux stages partagent un dépôt.
+                - name: BACKUP_TAG
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+              envFrom:
+                - secretRef:
+                    name: g4-env
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: work
+              emptyDir: {}
+            - name: scripts
+              configMap:
+                name: g4-backup-script
+                defaultMode: 0555
