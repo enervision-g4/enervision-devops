@@ -101,10 +101,15 @@ CREATE INDEX IF NOT EXISTS idx_measure_imputed_raw_id
 CREATE TABLE IF NOT EXISTS alert (
     alert_id         UUID NOT NULL DEFAULT gen_random_uuid(),
     -- Identifiant attribué par l'API source (ex. ALR-SITE002-1718458320). Il porte
-    -- l'idempotence : la même alerte est renvoyée à chaque interrogation tant qu'elle
-    -- reste active, et la contrainte ci-dessous absorbe ces republications sans
-    -- dupliquer la ligne. alert_id reste la clé technique, attendue en UUID par
-    -- enervision-api.
+    -- l'idempotence : la contrainte ci-dessous absorbe la remise d'un même message par
+    -- Kafka sans dupliquer la ligne, au même titre que pour les mesures. alert_id
+    -- reste la clé technique, attendue en UUID par enervision-api.
+    --
+    -- Mesuré sur l'instance mock : elle fabrique une liste d'alertes neuve à chaque
+    -- appel plutôt que de renvoyer des alertes actives durables, deux interrogations
+    -- espacées de vingt secondes n'ayant aucune alerte en commun. Cette contrainte ne
+    -- dédoublonne donc rien à la source, et la table accumule autant d'alertes que le
+    -- collecteur en relève. C'est une propriété du simulateur, pas du schéma.
     source_alert_id  TEXT NOT NULL,
     "timestamp"      TIMESTAMPTZ NOT NULL,
     site_id          TEXT NOT NULL REFERENCES site (site_id),
