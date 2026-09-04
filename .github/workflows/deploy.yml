@@ -66,6 +66,15 @@ jobs:
           repository: enervision-g4/enervision-devops
           ref: main
 
+      - name: Log in to GHCR
+        # Le "docker/login-action" dans le ci-cd.yml de chaque service
+        # n'authentifie que le runner GitHub-hosted éphémère qui build+push
+        # l'image (job "build-and-push"), pas ce runner self-hosted qui,
+        # lui, doit ensuite PULL cette même image sur le serveur. Sans ce
+        # login, "docker compose pull" échoue avec "unauthorized" (l'image
+        # est privée sur GHCR par défaut).
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Write .env and deploy
         env:
           ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
