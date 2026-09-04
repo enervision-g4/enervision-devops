@@ -48,6 +48,14 @@ on:
         description: "Contenu du .env de l'environnement cible (secret GitHub par environnement onprem-<stage>)"
         required: true
 
+permissions:
+  # Plancher explicite exige par l'analyse de securite. contents: read pour le
+  # checkout ; packages: read parce que deploy.yml ouvre une session GHCR afin de
+  # recuperer les images privees des services. Un workflow appelant plafonne les
+  # permissions du workflow appele : retirer packages ici casserait ce pull.
+  contents: read
+  packages: read
+
 jobs:
   deploy:
     runs-on: [self-hosted, "${{ inputs.stage }}"]
@@ -85,7 +93,8 @@ jobs:
           TARGET_DIR="/opt/g4/${{ inputs.service }}-${{ inputs.stage }}"
           sudo mkdir -p "$TARGET_DIR"
           sudo cp "compose/${{ inputs.service }}.yml" "$TARGET_DIR/"
-          sudo cp -r db/init "$TARGET_DIR/db-init" 2>/dev/null || true
+          sudo mkdir -p "$TARGET_DIR/db"
+          sudo cp -r db/init "$TARGET_DIR/db/init" 2>/dev/null || true
 
           printf '%s\n' "$ENV_FILE_CONTENTS" | sudo tee "$TARGET_DIR/.env" > /dev/null
           {
