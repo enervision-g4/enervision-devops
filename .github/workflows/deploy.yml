@@ -85,7 +85,8 @@ jobs:
           TARGET_DIR="/opt/g4/${{ inputs.service }}-${{ inputs.stage }}"
           sudo mkdir -p "$TARGET_DIR"
           sudo cp "compose/${{ inputs.service }}.yml" "$TARGET_DIR/"
-          sudo cp -r db/init "$TARGET_DIR/db-init" 2>/dev/null || true
+          sudo mkdir -p "$TARGET_DIR/db"
+          sudo cp -r db/init "$TARGET_DIR/db/init" 2>/dev/null || true
 
           printf '%s\n' "$ENV_FILE_CONTENTS" | sudo tee "$TARGET_DIR/.env" > /dev/null
           {
