@@ -15,6 +15,15 @@
 -- recommendation -> prediction sont donc simplement indexés, pas contraints
 -- par FK. Les FK vers "site" (table normale, non-hypertable) restent de
 -- vraies contraintes.
+--
+-- Idempotence de l'ingestion : les consumers Kafka reçoivent chaque message au
+-- moins une fois, et l'API source n'est pas déterministe (deux appels sur le même
+-- horodatage renvoient des valeurs différentes). Les tables alimentées par le flux
+-- portent donc une contrainte d'unicité métier, sur laquelle le consumer s'appuie
+-- via ON CONFLICT DO NOTHING pour que la première écriture gagne : (site_id,
+-- timestamp) pour les mesures, source_alert_id pour les alertes. Une hypertable
+-- exigeant que toute contrainte unique inclue sa colonne de partitionnement,
+-- "timestamp" figure dans chacune d'elles.
 
 -- ============================================================
 -- SITE (table de référence, pas une hypertable)
@@ -44,7 +53,8 @@ CREATE TABLE IF NOT EXISTS measure_raw (
     humidity_percent     DOUBLE PRECISION,
     null_reasons         TEXT[],
     data_quality         TEXT,
-    PRIMARY KEY (measure_raw_id, "timestamp")
+    PRIMARY KEY (measure_raw_id, "timestamp"),
+    CONSTRAINT uq_measure_raw_site_timestamp UNIQUE (site_id, "timestamp")
 );
 
 SELECT create_hypertable(
@@ -71,7 +81,8 @@ CREATE TABLE IF NOT EXISTS measure_imputed (
     temperature_celsius  DOUBLE PRECISION,
     humidity_percent     DOUBLE PRECISION,
     imputation_method    TEXT,
-    PRIMARY KEY (measure_imputed_id, "timestamp")
+    PRIMARY KEY (measure_imputed_id, "timestamp"),
+    CONSTRAINT uq_measure_imputed_site_timestamp UNIQUE (site_id, "timestamp")
 );
 
 SELECT create_hypertable(
@@ -88,15 +99,22 @@ CREATE INDEX IF NOT EXISTS idx_measure_imputed_raw_id
 -- ALERT
 -- ============================================================
 CREATE TABLE IF NOT EXISTS alert (
-    alert_id      UUID NOT NULL DEFAULT gen_random_uuid(),
-    "timestamp"   TIMESTAMPTZ NOT NULL,
-    site_id       TEXT NOT NULL REFERENCES site (site_id),
-    severity      TEXT,
-    type          TEXT,
-    message       TEXT,
-    value_kw      DOUBLE PRECISION,
-    threshold_kw  DOUBLE PRECISION,
-    PRIMARY KEY (alert_id, "timestamp")
+    alert_id         UUID NOT NULL DEFAULT gen_random_uuid(),
+    -- Identifiant attribué par l'API source (ex. ALR-SITE002-1718458320). Il porte
+    -- l'idempotence : la même alerte est renvoyée à chaque interrogation tant qu'elle
+    -- reste active, et la contrainte ci-dessous absorbe ces republications sans
+    -- dupliquer la ligne. alert_id reste la clé technique, attendue en UUID par
+    -- enervision-api.
+    source_alert_id  TEXT NOT NULL,
+    "timestamp"      TIMESTAMPTZ NOT NULL,
+    site_id          TEXT NOT NULL REFERENCES site (site_id),
+    severity         TEXT,
+    type             TEXT,
+    message          TEXT,
+    value_kw         DOUBLE PRECISION,
+    threshold_kw     DOUBLE PRECISION,
+    PRIMARY KEY (alert_id, "timestamp"),
+    CONSTRAINT uq_alert_source_alert_id UNIQUE (source_alert_id, "timestamp")
 );
 
 SELECT create_hypertable(
