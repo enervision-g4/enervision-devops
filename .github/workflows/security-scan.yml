@@ -43,7 +43,7 @@ jobs:
 
       # Dépendances et fichiers
       - name: Trivy (système de fichiers)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -56,7 +56,7 @@ jobs:
       # Image
       - name: Trivy (image)
         if: inputs.image-ref != ''
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: image
           image-ref: ${{ inputs.image-ref }}
