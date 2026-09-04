@@ -55,6 +55,25 @@ jobs:
     steps:
       - name: Checkout enervision-devops
         uses: actions/checkout@v7
+        with:
+          # Sans "repository:" explicite, actions/checkout récupère
+          # ${{ github.repository }}, c'est-à-dire le repo qui a DÉCLENCHÉ
+          # le run (ex. enervision-api), pas celui qui possède ce workflow
+          # réutilisable. Ça marchait par coïncidence pour "Deploy DB"
+          # (déclenché directement dans ce repo, uses: ./...), mais casse
+          # dès qu'un autre repo (api, dashboard...) appelle ce workflow :
+          # compose/<service>.yml n'existe pas dans leur checkout.
+          repository: enervision-g4/enervision-devops
+          ref: main
+
+      - name: Log in to GHCR
+        # Le "docker/login-action" dans le ci-cd.yml de chaque service
+        # n'authentifie que le runner GitHub-hosted éphémère qui build+push
+        # l'image (job "build-and-push"), pas ce runner self-hosted qui,
+        # lui, doit ensuite PULL cette même image sur le serveur. Sans ce
+        # login, "docker compose pull" échoue avec "unauthorized" (l'image
+        # est privée sur GHCR par défaut).
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Write .env and deploy
         env:
