@@ -1,0 +1,24 @@
+# yamllint configuration for this repository.
+extends: default
+
+rules:
+  line-length:
+    max: 160
+    level: error
+
+  document-start: disable
+
+  # "on:" is the trigger key of every GitHub Actions workflow. yamllint
+  # reads it as the YAML 1.1 boolean "on" — a false positive on every
+  # single file under .github/workflows/.
+  truthy:
+    allowed-values: ["true", "false", "on"]
+
+  comments:
+    min-spaces-from-content: 1
+
+  braces:
+    max-spaces-inside: 1
+
+  indentation:
+    indent-sequences: consistent
