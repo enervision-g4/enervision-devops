@@ -82,13 +82,15 @@ jobs:
       - name: Job summary
         if: always()
         run: |
-          echo "## 🔒 Résultats du scan de sécurité" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Scan | Statut |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Trivy (fs) | ${{ steps.trivy-fs.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Détails complets dans l'onglet **Security**." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🔒 Résultats du scan de sécurité"
+            echo ""
+            echo "| Scan | Statut |"
+            echo "|---|---|"
+            echo "| Trivy (fs) | ${{ steps.trivy-fs.outcome }} |"
+            echo ""
+            echo "Détails complets dans l'onglet **Security**."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the security reports
         if: always()
