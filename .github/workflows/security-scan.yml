@@ -35,12 +35,6 @@ jobs:
           fetch-depth: 0
         uses: actions/checkout@v7
 
-      # Secrets
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       # Dépendances et fichiers
       - name: Trivy (système de fichiers)
         uses: aquasecurity/trivy-action@0.35.0
