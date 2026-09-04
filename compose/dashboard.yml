@@ -3,14 +3,14 @@ name: g4-dashboard
 services:
   dashboard:
     image: ${IMAGE}
-    container_name: g4_dashboard
+    container_name: g4_dashboard_${STAGE}
     restart: unless-stopped
     environment:
       API_URL: ${API_URL}
     networks:
       - g4_net
     ports:
-      - "${DASHBOARD_PORT:-8080}:80" # a redéfinir
+      - "${DASHBOARD_PORT}:80"
 
 networks:
   g4_net:
