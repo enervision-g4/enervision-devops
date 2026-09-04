@@ -48,6 +48,14 @@ on:
         description: "Contenu du .env de l'environnement cible (secret GitHub par environnement onprem-<stage>)"
         required: true
 
+permissions:
+  # Plancher explicite exige par l'analyse de securite. contents: read pour le
+  # checkout ; packages: read parce que deploy.yml ouvre une session GHCR afin de
+  # recuperer les images privees des services. Un workflow appelant plafonne les
+  # permissions du workflow appele : retirer packages ici casserait ce pull.
+  contents: read
+  packages: read
+
 jobs:
   deploy:
     runs-on: [self-hosted, "${{ inputs.stage }}"]
