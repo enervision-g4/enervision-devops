@@ -49,3 +49,13 @@ jobs:
       service: ${{ inputs.service }}
       image: ${{ inputs.image }}
     secrets: inherit
+
+# NOTE (service "db" uniquement) : compose/db.yml monte "./db/init" en bind
+# mount. Comme le runner self-hosted tourne lui-même dans un conteneur avec
+# le socket Docker de l'hôte monté (Docker-outside-of-Docker), un chemin
+# relatif checké out DANS le runner n'est pas forcément résolu par le
+# démon Docker de l'HÔTE de la même façon. Si le déploiement de "db"
+# échoue sur le bind mount, il faudra soit committer db/init sur un
+# chemin absolu connu de l'hôte, soit passer par une image Postgres custom
+# qui embarque déjà les scripts d'init. Pas bloquant pour api/dashboard
+# (aucun bind mount).

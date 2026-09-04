@@ -1,3 +1,5 @@
+name: g4
+
 services:
   runner-dev:
     image: myoung34/github-runner:latest
