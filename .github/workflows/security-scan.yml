@@ -39,7 +39,7 @@ jobs:
       - name: Trivy (système de fichiers)
         id: trivy-fs
         if: always()
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -52,7 +52,7 @@ jobs:
       # Image
       - name: Trivy (image)
         if: always() && inputs.image-ref != ''
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ inputs.image-ref }}
@@ -101,14 +101,16 @@ jobs:
       - name: Job summary
         if: always()
         run: |
-          echo "## 🔒 Résultats du scan de sécurité" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Scan | Statut |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Trivy (fs) | ${{ steps.trivy-fs.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| checkov (Terraform) | ${{ steps.checkov.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Détails complets dans l'onglet **Security**." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🔒 Résultats du scan de sécurité"
+            echo ""
+            echo "| Scan | Statut |"
+            echo "|---|---|"
+            echo "| Trivy (fs) | ${{ steps.trivy-fs.outcome }} |"
+            echo "| checkov (Terraform) | ${{ steps.checkov.outcome }} |"
+          echo ""
+            echo "Détails complets dans l'onglet **Security**."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the security reports
         if: always()

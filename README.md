@@ -38,7 +38,8 @@ service (`compose/db.yml` a la même forme que `compose/api.yml`,
 │   ├── bootstrap-network.sh       # créé une fois par environnement
 │   ├── backup.sh                  # sauvegarde chiffrée générique (par service)
 │   └── restore.sh
-└── db/init/                       # scripts d'initialisation SQL (service db uniquement)
+├── db/init/                        # scripts d'initialisation SQL (bases neuves)
+└── db/migrations/                  # scripts a rejouer sur une base deja initialisee
 ```
 
 ## Lancer la pile en local
@@ -88,6 +89,20 @@ variable manque réellement.
 5. Portabilité : le même `compose/<service>.yml` et le même workflow de
    déploiement tournent sur le on-premise, une VM Azure, un VPS OVH...
    seul le `.env` de l'environnement change (voir `envs/`).
+
+## Migrations base de données
+
+`db/init/` ne rejoue pas sur un volume déjà initialisé : un changement de schéma sur
+une base existante passe par `db/migrations/`, chaque script appliqué manuellement une
+fois par environnement, dans l'ordre de leur numéro :
+
+```bash
+docker exec -i g4_db_dev psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  < db/migrations/002_add_recommendation_unique_constraint.sql
+```
+
+Chaque script est idempotent (rejouable sans effet s'il est déjà appliqué) et
+transactionnel (`BEGIN`/`COMMIT`).
 
 ## Ajouter un nouveau service
 
