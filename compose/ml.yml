@@ -7,11 +7,20 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL}
-    networks:
-      - g4_net
+      # scikit-learn (via numpy/scipy) parallelise le calcul matriciel sur tous les
+      # coeurs visibles par defaut, independamment de la limite cpus ci-dessous : sans
+      # ces variables, un entrainement peut faire des pointes sur tous les coeurs du
+      # serveur partage le temps d'un cycle, meme brievement. On les aligne sur cpus.
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+
+    cpus: 2.0
+    mem_limit: 1g
     # Environnement Azure : ce service consomme une base locale restaurée
     # depuis l'archive chiffrée (voir scripts/restore.sh), pas la base
     # on-premise directement.
+    networks:
+      - g4_net
 
 networks:
   g4_net:
