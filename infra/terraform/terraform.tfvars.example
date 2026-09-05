@@ -1,0 +1,14 @@
+# cp terraform.tfvars.example terraform.tfvars then adjust.
+# terraform.tfvars is git-ignored (see .gitignore).
+
+# 3-24 characters, lowercase letters and digits, globally unique in Azure.
+storage_account_name = "g4backupprodXXXX"
+
+# location = "francecentral"   # default; only change it with the
+                               # data-sovereignty argument in mind
+
+# Object IDs of the identities allowed on this storage account, and on
+# nothing else (az ad sp show --id <appId> --query id -o tsv). Leave
+# empty while restic uses the shared account key.
+backup_writer_principal_ids = []
+backup_reader_principal_ids = []
