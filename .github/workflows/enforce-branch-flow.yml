@@ -21,29 +21,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR source/target
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PROTECTED_BASE: ${{ inputs.protected_base }}
+          REQUIRED_SOURCE: ${{ inputs.required_source }}
+          DEV_BASE: ${{ inputs.dev_base }}
+          DEV_ALLOWED_PATTERNS: ${{ inputs.dev_allowed_patterns }}
         run: |
-          BASE="${{ github.event.pull_request.base.ref }}"
-          HEAD="${{ github.event.pull_request.head.ref }}"
+          BASE="$BASE_REF"
+          HEAD="$HEAD_REF"
 
           echo "PR: $HEAD -> $BASE"
 
           # Rule 1: main only accepts PRs from develop
-          if [ "$BASE" = "${{ inputs.protected_base }}" ] && [ "$HEAD" != "${{ inputs.required_source }}" ]; then
-            echo "❌ PRs into '${{ inputs.protected_base }}' are only allowed from '${{ inputs.required_source }}'."
+          if [ "$BASE" = "$PROTECTED_BASE" ] && [ "$HEAD" != "$REQUIRED_SOURCE" ]; then
+            echo "❌ PRs into '$PROTECTED_BASE' are only allowed from '$REQUIRED_SOURCE'."
             exit 1
           fi
 
           # Rule 2: develop only accepts PRs from allowed branch patterns
-          if [ "$BASE" = "${{ inputs.dev_base }}" ]; then
+          if [ "$BASE" = "$DEV_BASE" ]; then
             MATCHED=false
-            for pattern in ${{ inputs.dev_allowed_patterns }}; do
+            for pattern in $DEV_ALLOWED_PATTERNS; do
               case "$HEAD" in
                 $pattern) MATCHED=true ;;
               esac
             done
 
             if [ "$MATCHED" = false ]; then
-              echo "❌ PRs into '${{ inputs.dev_base }}' must come from one of: ${{ inputs.dev_allowed_patterns }}"
+              echo "❌ PRs into '$DEV_BASE' must come from one of: $DEV_ALLOWED_PATTERNS"
               exit 1
             fi
           fi
