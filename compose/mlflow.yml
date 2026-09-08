@@ -23,14 +23,23 @@ services:
     # defaut plutot que de le completer : la couverture localhost/IP privee est
     # donc recopiee explicitement ici pour garder l'UI navigable depuis le
     # reseau interne, en plus de g4_mlflow.
-    command: >
-      mlflow server
-      --backend-store-uri sqlite:////mlflow/data/mlflow.db
-      --default-artifact-root /mlflow/data/artifacts
-      --host 0.0.0.0
-      --port 5000
-      --workers 1
-      --allowed-hosts g4_mlflow:5000,localhost:*,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,172.30.*,172.31.*,192.168.*
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - sqlite:////mlflow/data/mlflow.db
+      - --default-artifact-root
+      - /mlflow/data/artifacts
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --workers
+      - "1"
+      - --allowed-hosts
+      - "g4_mlflow:5000,localhost:*,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,\
+        172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,\
+        172.30.*,172.31.*,192.168.*"
     volumes:
       - g4_mlflow_data:/mlflow/data
     ports:
