@@ -1,0 +1,6 @@
+# cp terraform.tfvars.example terraform.tfvars then adjust.
+
+# 3-24 characters, lowercase letters and digits, globally unique in Azure.
+storage_account_name = "g4tfstateXXXX"
+
+# location = "francecentral"   # default
