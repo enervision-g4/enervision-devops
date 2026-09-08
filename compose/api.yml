@@ -12,6 +12,7 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       API_USERNAME: ${API_USERNAME}
       API_PASSWORD_HASH: ${API_PASSWORD_HASH}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
     ports:
       - "${API_PORT}:3000"
     # Exposé directement sur le port hôte ${API_PORT} (défini dans le .env
