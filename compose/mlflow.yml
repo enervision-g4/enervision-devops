@@ -50,12 +50,6 @@ services:
           - g4_mlflow
     # Serveur partage entre plusieurs groupes : un outil de suivi interne, a
     # faible trafic, ne doit pas pouvoir monopoliser le CPU des autres services.
-    # mem_limit mesure en pratique sur MLflow 3.16 : ce n'est plus un unique
-    # processus FastAPI, mais ~9 (serveur + uvicorn + job_runner + 6 workers
-    # huey pour le systeme de jobs asynchrones, introduit en MLflow 3). Leur
-    # somme depasse 1g en quelques minutes, tue par le cgroup (Killed process
-    # ... (mlflow), confirme via dmesg), redemarre le conteneur en boucle
-    # toutes les ~20s. 2g absorbe cette charge cumulee au repos.
     cpus: 1.0
     mem_limit: 2g
     healthcheck:
