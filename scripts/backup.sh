@@ -27,8 +27,9 @@ trap 'rm -f "$TMP"' EXIT
 if [ "$SERVICE" = "db" ]; then
   : "${POSTGRES_USER:?POSTGRES_USER manquant}"
   : "${POSTGRES_DB:?POSTGRES_DB manquant}"
-  echo "→ pg_dump depuis g4_db"
-  docker exec g4_db pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$TMP"
+  echo "→ pg_dump depuis g4_db_${STAGE}"
+  docker exec "g4_db_${STAGE:?STAGE manquant (dev ou prod)}" \
+    pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$TMP"
 else
   VOLUME="${2:?--volume <name> requis pour un service non-db}"
   echo "→ archive du volume $VOLUME"

@@ -1,0 +1,74 @@
+name: Backup DB
+
+# Daily encrypted backup of the database into a restic repository
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "Stage to back up"
+        type: choice
+        options: [prod, dev]
+        default: prod
+
+concurrency:
+  group: backup-db-${{ inputs.stage || 'prod' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: backup
+    runs-on: [self-hosted, "${{ inputs.stage || 'prod' }}"]
+    environment: onprem-${{ inputs.stage || 'prod' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install restic
+        env:
+          RESTIC_VERSION: "0.18.1"
+          RESTIC_REPOSITORY: ${{ secrets.RESTIC_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64)  arch=amd64 ;;
+            aarch64) arch=arm64 ;;
+            *) echo "::error::unsupported architecture: $(uname -m)"; exit 1 ;;
+          esac
+          url="https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_${arch}.bz2"
+          curl -fsSL "$url" | bunzip2 > /tmp/restic
+          sudo install -m 0755 /tmp/restic /usr/local/bin/restic
+          hash -r
+          restic version
+
+          # Does the target backend answer? An uncompiled scheme fails
+          # here, before the backup, with an actionable message.
+          scheme="${RESTIC_REPOSITORY%%:*}"
+          if restic -r "${scheme}:probe:/probe" cat config 2>&1 | grep -q "invalid backend"; then
+            echo "::error::this restic does not support the '${scheme}:' scheme"
+            exit 1
+          fi
+
+      - name: Encrypted backup
+        env:
+          # docker exec rather than a network connection: the PostgreSQL port is not published on the host
+          G4_DB_CONTAINER: g4_db_${{ inputs.stage || 'prod' }}
+          BACKUP_TAG: g4-${{ inputs.stage || 'prod' }}
+          DUMP_PATH: ${{ runner.temp }}/g4_db.dump
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          RESTIC_REPOSITORY: ${{ secrets.RESTIC_REPOSITORY }}
+          RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
+          AZURE_ACCOUNT_NAME: ${{ secrets.AZURE_ACCOUNT_NAME }}
+          AZURE_ACCOUNT_KEY: ${{ secrets.AZURE_ACCOUNT_KEY }}
+        run: ./scripts/db-backup-to-azure.sh all
+
+      - name: Wipe the local dump
+        if: always()
+        run: rm -f "${{ runner.temp }}/g4_db.dump"
