@@ -1,0 +1,65 @@
+name: g4-mlflow
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.16.0
+    container_name: g4_mlflow_${STAGE}
+    restart: unless-stopped
+    # Aucun modele/artefact reel a stocker (voir enervision-ml : jamais de
+    # persistance de modele). Seules des metriques d'evaluation transitent, dans
+    # un backend SQLite embarque au lieu de la base partagee TimescaleDB : rien
+    # ici n'a besoin d'etre une hypertable ni partage avec un autre service.
+    # --workers 1 : serveur interne a faible trafic (juste des runs d'evaluation
+    # ponctuels), pas besoin des 4 workers par defaut sur un serveur partage.
+    # --allowed-hosts : MLflow 3 refuse par defaut (anti DNS-rebinding) tout Host
+    # header qui n'est ni localhost ni une IP privee (10.*, 172.16-31.*,
+    # 192.168.*) reconnue comme telle par un test litteral sur la chaine du
+    # header, pas par resolution DNS. g4_mlflow (l'alias reseau interne que
+    # enervision-ml utilise pour joindre ce service) est un nom, pas une IP :
+    # il ne matche donc jamais ces motifs et doit etre ajoute explicitement, sans
+    # quoi chaque appel du client serait rejete en 403 (capture silencieusement
+    # par le best-effort de ExperimentTrackingLogger, aucune erreur visible cote
+    # evaluate, juste aucune metrique journalisee). Passer ce drapeau REMPLACE le
+    # defaut plutot que de le completer : la couverture localhost/IP privee est
+    # donc recopiee explicitement ici pour garder l'UI navigable depuis le
+    # reseau interne, en plus de g4_mlflow.
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/data/mlflow.db
+      --default-artifact-root /mlflow/data/artifacts
+      --host 0.0.0.0
+      --port 5000
+      --workers 1
+      --allowed-hosts g4_mlflow:5000,localhost:*,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,172.30.*,172.31.*,192.168.*
+    volumes:
+      - g4_mlflow_data:/mlflow/data
+    ports:
+      - "${MLFLOW_PORT}:5000"
+    networks:
+      g4_net:
+        aliases:
+          - g4_mlflow
+    # Serveur partage entre plusieurs groupes : un outil de suivi interne, a
+    # faible trafic, ne doit pas pouvoir monopoliser le CPU des autres services.
+    # mem_limit mesure en pratique : 512m provoque un cycle de redemarrage
+    # perpetuel (FastAPI/SQLAlchemy/alembic depassent ce plafond des le
+    # demarrage), 1g tourne stable au repos.
+    cpus: 1.0
+    mem_limit: 1g
+    healthcheck:
+      # L'image officielle n'embarque ni curl ni wget, seulement python.
+      test: [
+        "CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  g4_mlflow_data:
+    name: g4_mlflow_data_${STAGE}
+
+networks:
+  g4_net:
+    external: true

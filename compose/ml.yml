@@ -7,6 +7,10 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      # Suivi MLflow des metriques d'evaluation uniquement (aucun artefact de
+      # modele). Defaut vide : le service reste utilisable meme si la variable
+      # n'est pas renseignee dans l'environnement de deploiement.
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-}
       # scikit-learn (via numpy/scipy) parallelise le calcul matriciel sur tous les
       # coeurs visibles par defaut, independamment de la limite cpus ci-dessous : sans
       # ces variables, un entrainement peut faire des pointes sur tous les coeurs du
