@@ -1,0 +1,32 @@
+name: Lint
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install yamllint
+        run: pip install --quiet --user yamllint
+
+      - name: yamllint
+        run: yamllint -f github --strict .
+
+      - name: actionlint
+        uses: rhysd/actionlint@v1.7.12

@@ -1,0 +1,11 @@
+# Labels of the project's self-hosted runners, declared so that actionlint
+# stops flagging them as unknown.
+#
+# "dev" and "prod" are set by infra/runners/docker-compose.runners.yml
+# (the LABELS variable): that label is what routes a deployment to the
+# right stage. Listing them here creates nothing — it only tells the
+# linter that these labels do exist.
+self-hosted-runner:
+  labels:
+    - dev
+    - prod
