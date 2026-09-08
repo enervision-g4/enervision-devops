@@ -50,11 +50,8 @@ services:
           - g4_mlflow
     # Serveur partage entre plusieurs groupes : un outil de suivi interne, a
     # faible trafic, ne doit pas pouvoir monopoliser le CPU des autres services.
-    # mem_limit mesure en pratique : 512m provoque un cycle de redemarrage
-    # perpetuel (FastAPI/SQLAlchemy/alembic depassent ce plafond des le
-    # demarrage), 1g tourne stable au repos.
     cpus: 1.0
-    mem_limit: 1g
+    mem_limit: 2g
     healthcheck:
       # L'image officielle n'embarque ni curl ni wget, seulement python.
       test: [
