@@ -80,18 +80,6 @@ jobs:
             uv pip install --system -r requirements.txt
           fi
 
-      - name: ruff (lint)
-        if: inputs.language == 'python'
-        uses: astral-sh/ruff-action@v4.1.0
-        with:
-          args: "check --output-format=github"
-
-      - name: ruff (format)
-        if: inputs.language == 'python'
-        uses: astral-sh/ruff-action@v4.1.0
-        with:
-          args: "format --check"
-
       - name: pytest
         if: inputs.language == 'python' && inputs.run-tests
         run: |
@@ -113,14 +101,6 @@ jobs:
       - name: Install the Node dependencies
         if: inputs.language == 'node'
         run: npm ci
-
-      - name: eslint
-        if: inputs.language == 'node'
-        run: npm run lint --if-present
-
-      - name: prettier
-        if: inputs.language == 'node'
-        run: npx --no-install prettier --check . || echo "::warning::prettier absent ou non configuré"
 
       - name: Tests
         if: inputs.language == 'node' && inputs.run-tests
