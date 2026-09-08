@@ -136,12 +136,19 @@ CREATE INDEX IF NOT EXISTS idx_alert_site_time
 CREATE TABLE IF NOT EXISTS prediction (
     prediction_id             UUID NOT NULL DEFAULT gen_random_uuid(),
     site_id                   TEXT NOT NULL REFERENCES site (site_id),
-    target_timestamp          TIMESTAMPTZ,
+    target_timestamp          TIMESTAMPTZ NOT NULL,
     predicted_consumption_kw  DOUBLE PRECISION,
     threshold_kw              DOUBLE PRECISION,
-    model_version             TEXT,
+    model_version             TEXT NOT NULL,
     "timestamp"               TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (prediction_id, "timestamp")
+    PRIMARY KEY (prediction_id, "timestamp"),
+    -- Idempotence du service ml : un lot rejoue apres echec partiel n'insere rien
+    -- deux fois. "timestamp" figure dans la cle parce qu'une hypertable exige que
+    -- toute contrainte unique inclue sa colonne de partitionnement ; sa presence a
+    -- pour effet voulu que deux runs successifs conservent chacun leur prevision,
+    -- l'historique des previsions etant ce qui permettra d'en mesurer la justesse.
+    CONSTRAINT uq_prediction_site_target_model
+        UNIQUE (site_id, target_timestamp, model_version, "timestamp")
 );
 
 SELECT create_hypertable(

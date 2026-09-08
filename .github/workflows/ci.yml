@@ -79,7 +79,7 @@ jobs:
           elif [ -f requirements.txt ]; then
             uv pip install --system -r requirements.txt
           fi
-      
+
       - name: ruff (lint)
         if: inputs.language == 'python'
         uses: astral-sh/ruff-action@v4.1.0
@@ -91,7 +91,7 @@ jobs:
         uses: astral-sh/ruff-action@v4.1.0
         with:
           args: "format --check"
-      
+
       - name: pytest
         if: inputs.language == 'python' && inputs.run-tests
         run: |
