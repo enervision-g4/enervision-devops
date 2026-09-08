@@ -5,7 +5,7 @@ services:
     # Même image que le collecteur : les deux points d'entrée y sont installés, seule
     # la commande distingue les trois rôles.
     image: ${IMAGE}
-    container_name: g4_consumer_alerting
+    container_name: g4_consumer_alerting_${STAGE}
     entrypoint: ["enervision-consumer"]
     command: ["consume-alerting"]
     restart: unless-stopped
