@@ -13,8 +13,7 @@ services:
       # serveur partage le temps d'un cycle, meme brievement. On les aligne sur cpus.
       OMP_NUM_THREADS: "2"
       OPENBLAS_NUM_THREADS: "2"
-    # Serveur partage entre plusieurs groupes : sans limite, un entrainement peut
-    # saturer 100 % du CPU et degrader les autres services le temps d'un cycle.
+    
     cpus: 2.0
     mem_limit: 1g
     # Environnement Azure : ce service consomme une base locale restaurée
@@ -26,4 +25,3 @@ services:
 networks:
   g4_net:
     external: true
-
