@@ -93,12 +93,12 @@ variable manque réellement.
 ## Migrations base de données
 
 `db/init/` ne rejoue pas sur un volume déjà initialisé : un changement de schéma sur
-une base existante passe par `db/migrations/`, appliqué manuellement une fois par
-environnement :
+une base existante passe par `db/migrations/`, chaque script appliqué manuellement une
+fois par environnement, dans l'ordre de leur numéro :
 
 ```bash
 docker exec -i g4_db_dev psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  < db/migrations/001_add_prediction_unique_constraint.sql
+  < db/migrations/002_add_recommendation_unique_constraint.sql
 ```
 
 Chaque script est idempotent (rejouable sans effet s'il est déjà appliqué) et

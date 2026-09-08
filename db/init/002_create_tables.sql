@@ -165,11 +165,17 @@ CREATE INDEX IF NOT EXISTS idx_prediction_site_time
 CREATE TABLE IF NOT EXISTS recommendation (
     recommendation_id   UUID NOT NULL DEFAULT gen_random_uuid(),
     site_id             TEXT NOT NULL REFERENCES site (site_id),
-    prediction_id       UUID,
+    prediction_id       UUID NOT NULL,
     "timestamp"         TIMESTAMPTZ NOT NULL,
     action_description  TEXT,
     status              TEXT,
-    PRIMARY KEY (recommendation_id, "timestamp")
+    PRIMARY KEY (recommendation_id, "timestamp"),
+    -- Meme pattern d'idempotence que sur prediction (voir uq_prediction_site_target_model) :
+    -- prediction_id n'est pas unique a lui seul dans la table prediction (un meme
+    -- creneau rejoue a un autre run garde le meme prediction_id avec un "timestamp"
+    -- different), donc pas de cle etrangere directe ici. Cette contrainte protege
+    -- seulement le rejeu de recommendation elle-meme.
+    CONSTRAINT uq_recommendation_prediction UNIQUE (prediction_id, "timestamp")
 );
 
 SELECT create_hypertable(
