@@ -34,7 +34,7 @@ jobs:
               line-length: {max: 160, level: error}
               document-start: disable
               truthy: {allowed-values: ["true", "false", "on"]}
-              comments: {min-spaces-inside: 1}
+              comments: {min-spaces-from-content: 1}
               braces: {max-spaces-inside: 1}
               indentation: {indent-sequences: consistent}
         run: |
