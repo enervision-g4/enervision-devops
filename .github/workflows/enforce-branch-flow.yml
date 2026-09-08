@@ -16,6 +16,9 @@ on:
         type: string
         default: 'feature/* fix/* chore/* dependabot/*'
 
+permissions:
+  contents: read
+
 jobs:
   check-source-branch:
     runs-on: ubuntu-latest
