@@ -1,0 +1,70 @@
+name: Terraform
+
+# Correctness checks for infra/terraform/ — formatting and validation.
+#
+# Security scanning of the same files lives in security-scan.yml
+# (checkov, wired to its scan-terraform input), so the two never overlap:
+# this workflow answers "is the configuration well-formed and coherent",
+# the other one answers "is it safely configured".
+#
+# fmt and validate need no cloud credentials at all: `terraform init
+# -backend=false` skips the remote state entirely and only resolves the
+# provider. That is what makes this runnable on every PR, including from
+# a fork, with nothing configured.
+#
+# `terraform plan` is a separate job because it DOES need credentials. It
+# skips itself when they are absent instead of failing, so the workflow
+# stays green before the Azure subscription exists.
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+
+env:
+  TF_INPUT: "false"
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The two root modules are independent: bootstrap/ creates the
+        # storage account that holds the other one's remote state, so it
+        # has its own state and its own provider resolution.
+        module: [infra/terraform, infra/terraform/bootstrap]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16"
+          terraform_wrapper: false
+
+      - name: Format check
+        # Recursive from the repository root, so a stray .tf anywhere is
+        # caught too — not only the two modules in the matrix.
+        run: terraform fmt -check -recursive -diff
+
+      - name: Init (no backend)
+        working-directory: ${{ matrix.module }}
+        run: terraform init -backend=false
+
+      - name: Validate
+        working-directory: ${{ matrix.module }}
+        run: terraform validate -no-color
