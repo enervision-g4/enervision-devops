@@ -35,7 +35,7 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
-$      - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.retention.time=15d"
     configs:
       - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
