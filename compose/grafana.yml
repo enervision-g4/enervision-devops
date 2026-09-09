@@ -1,0 +1,33 @@
+name: g4-grafana
+
+services:
+  grafana:
+    # Image fixe, comme db.yml et kafka.yml : rien n'est build ici, la variable
+    # IMAGE injectée par deploy.yml ne concerne que les services applicatifs.
+    image: ${GRAFANA_IMAGE:-grafana/grafana:latest}
+    container_name: g4_grafana_${STAGE}
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      # Les datasources et les dashboards créés dans l'UI vivent ici. Pas de
+      # provisioning par bind mount : deploy.yml ne recopie que
+      # compose/<service>.yml sur le serveur, et son propre commentaire final
+      # rappelle que les bind mounts sont incertains sous le runner
+      # Docker-outside-of-Docker. Le volume survit à un redéploiement.
+      - g4_grafana_data:/var/lib/grafana
+    networks:
+      - g4_net
+    ports:
+      # Port hôte distinct par stage, même contrainte que API_PORT et
+      # DASHBOARD_PORT : dev et prod tournent sur le même hôte Docker.
+      - "${GRAFANA_PORT}:3000"
+
+volumes:
+  g4_grafana_data:
+    name: g4_grafana_data_${STAGE}
+
+networks:
+  g4_net:
+    external: true
