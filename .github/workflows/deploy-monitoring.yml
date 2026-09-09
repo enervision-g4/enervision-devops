@@ -1,15 +1,18 @@
-name: Deploy Grafana
+name: Deploy Monitoring
+
+# cAdvisor sees every container on the daemon: one stack covers the whole host.
+# Pick stage=prod, and do not run a second one in dev.
 
 on:
   workflow_dispatch:
     inputs:
       stage:
-        description: "Target environment"
+        description: "Target environment (prod expected — one stack per host)"
         required: true
         type: choice
         options:
-          - dev
           - prod
+          - dev
 
 permissions:
   contents: read
@@ -19,7 +22,7 @@ jobs:
   deploy:
     uses: ./.github/workflows/deploy.yml
     with:
-      service: grafana
+      service: monitoring
       stage: ${{ inputs.stage }}
       image: unused
     secrets: inherit
