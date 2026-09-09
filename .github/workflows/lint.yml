@@ -1,0 +1,48 @@
+name: Lint
+
+on:
+  workflow_call:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install yamllint
+        run: pip install --quiet --user yamllint
+
+      - name: yamllint
+        env:
+          SHARED_CONFIG: |
+            extends: default
+            rules:
+              line-length: {max: 160, level: error}
+              document-start: disable
+              truthy: {allowed-values: ["true", "false", "on"]}
+              comments: {min-spaces-from-content: 1}
+              braces: {max-spaces-inside: 1}
+              indentation: {indent-sequences: consistent}
+        run: |
+          if ls .yamllint .yamllint.yaml .yamllint.yml >/dev/null 2>&1; then
+            yamllint -f github --strict .
+          else
+            yamllint -f github --strict -d "$SHARED_CONFIG" .
+          fi
+
+      - name: actionlint
+        uses: rhysd/actionlint@v1.7.12
