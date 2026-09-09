@@ -1,0 +1,75 @@
+name: g4-monitoring
+
+# Docker container monitoring: cAdvisor measures, Prometheus stores, Grafana
+# reads (compose/grafana.yml, Prometheus datasource).
+
+services:
+  cadvisor:
+    image: ${CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:latest}
+    container_name: g4_cadvisor_${STAGE}
+    restart: unless-stopped
+    command:
+      # Without -docker_only, cAdvisor also reports the host's system cgroups:
+      # many series, none of them about this project.
+      - "-docker_only=true"
+      - "-housekeeping_interval=10s"
+    # Reads the cgroups and the daemon state. Every path below is a HOST path,
+    # resolved by the host daemon: unlike a repository file, these really exist
+    # where docker looks for them.
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - g4_net
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
+    container_name: g4_prometheus_${STAGE}
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+$      - "--storage.tsdb.retention.time=15d"
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - g4_prometheus_data:/prometheus
+    networks:
+      - g4_net
+    # No "ports:" on purpose. Grafana reaches Prometheus through the g4_net
+    # DNS; publishing 9090 on a shared server would expose every metric with no
+    # authentication. For a one-off debug:
+    #   docker exec g4_prometheus_prod wget -qO- localhost:9090/-/healthy
+    depends_on:
+      - cadvisor
+
+configs:
+  prometheus_config:
+    # Inline content rather than a mounted file: deploy.yml only copies
+    # compose/<service>.yml onto the server, and the self-hosted runner has no
+    # /opt/g4 mount from the host — a bind mount of a repository file would
+    # resolve to an empty directory on the daemon side. Here everything fits in
+    # this single file.
+    content: |
+      global:
+        scrape_interval: 15s
+
+      scrape_configs:
+        - job_name: cadvisor
+          static_configs:
+            - targets: ['g4_cadvisor_${STAGE}:8080']
+
+volumes:
+  g4_prometheus_data:
+    name: g4_prometheus_data_${STAGE}
+
+networks:
+  g4_net:
+    external: true
