@@ -28,6 +28,7 @@ service (`compose/db.yml` a la même forme que `compose/api.yml`,
 │   ├── dashboard.yml
 │   ├── db.yml
 │   ├── etl.yml
+│   ├── grafana.yml            # visualisation, branchée sur TimescaleDB
 │   ├── kafka.yml              # broker + création des topics
 │   └── ml.yml
 ├── envs/                          # un .env par environnement de déploiement
