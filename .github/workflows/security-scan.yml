@@ -39,7 +39,7 @@ jobs:
       - name: Trivy (système de fichiers)
         id: trivy-fs
         if: always()
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -52,7 +52,7 @@ jobs:
       # Image
       - name: Trivy (image)
         if: always() && inputs.image-ref != ''
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ inputs.image-ref }}
@@ -62,6 +62,18 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           exit-code: "1"
+
+      - name: checkov (Terraform)
+        id: checkov
+        if: inputs.scan-terraform && hashFiles('infra/terraform/**/*.tf') != ''
+        continue-on-error: true
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/terraform
+          framework: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: true
 
       # Rapports - Security tab
       - name: Upload Trivy fs SARIF
@@ -78,17 +90,27 @@ jobs:
           sarif_file: trivy-image.sarif
           category: trivy-image
 
+      - name: Upload checkov SARIF
+        if: always() && hashFiles('checkov.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
       # Résumé lisible directement dans l'onglet Checks de la PR
       - name: Job summary
         if: always()
         run: |
-          echo "## 🔒 Résultats du scan de sécurité" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Scan | Statut |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Trivy (fs) | ${{ steps.trivy-fs.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Détails complets dans l'onglet **Security**." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🔒 Résultats du scan de sécurité"
+            echo ""
+            echo "| Scan | Statut |"
+            echo "|---|---|"
+            echo "| Trivy (fs) | ${{ steps.trivy-fs.outcome }} |"
+            echo "| checkov (Terraform) | ${{ steps.checkov.outcome }} |"
+          echo ""
+            echo "Détails complets dans l'onglet **Security**."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the security reports
         if: always()
@@ -98,5 +120,6 @@ jobs:
           path: |
             trivy-fs.sarif
             trivy-image.sarif
+            checkov.sarif
           if-no-files-found: ignore
           retention-days: 30

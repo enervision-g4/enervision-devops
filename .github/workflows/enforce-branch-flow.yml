@@ -14,7 +14,10 @@ on:
         default: 'develop'
       dev_allowed_patterns:
         type: string
-        default: 'feature/* fix/* chore/* dependabot/*'
+        default: 'feature/* fix/* chore/* dependabot/* docs/*'
+
+permissions:
+  contents: read
 
 jobs:
   check-source-branch:
@@ -44,6 +47,7 @@ jobs:
           if [ "$BASE" = "$DEV_BASE" ]; then
             MATCHED=false
             for pattern in $DEV_ALLOWED_PATTERNS; do
+              # shellcheck disable=SC2254
               case "$HEAD" in
                 $pattern) MATCHED=true ;;
               esac
