@@ -23,6 +23,14 @@ services:
     # defaut plutot que de le completer : la couverture localhost/IP privee est
     # donc recopiee explicitement ici pour garder l'UI navigable depuis le
     # reseau interne, en plus de g4_mlflow.
+    #
+    # --cors-allowed-origins : protection SEPAREE de --allowed-hosts, ajoutee en
+    # MLflow 3.5 (anti-CSRF, verifie le header Origin plutot que Host). Sans elle,
+    # le navigateur charge la page (Host valide) mais TOUS les appels POST de l'UI
+    # (recherche de runs, modeles, traces...) sont rejetes en 403 -> UI qui affiche
+    # "Failed to load chart data" / "Request error INTERNAL_ERROR" partout, alors
+    # que le serveur lui-meme est sain. Pas de defaut large ici (contrairement a
+    # --allowed-hosts) : valeur exacte scheme+host+port fournie par MLFLOW_CORS_ALLOWED_ORIGINS.
     command:
       - mlflow
       - server
@@ -40,6 +48,8 @@ services:
       - "g4_mlflow:5000,localhost:*,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,\
         172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,\
         172.30.*,172.31.*,192.168.*"
+      - --cors-allowed-origins
+      - "${MLFLOW_CORS_ALLOWED_ORIGINS}"
     volumes:
       - g4_mlflow_data:/mlflow/data
     ports:
