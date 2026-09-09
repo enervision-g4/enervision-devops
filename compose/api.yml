@@ -12,15 +12,16 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       API_USERNAME: ${API_USERNAME}
       API_PASSWORD_HASH: ${API_PASSWORD_HASH}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
     ports:
       - "${API_PORT}:3000"
-    networks:
-      - g4_net
     # Exposé directement sur le port hôte ${API_PORT} (défini dans le .env
     # de chaque environnement, différent pour dev et prod — pas de Traefik
     # ici, on ne dépend pas de l'instance de l'autre groupe). 3000 = port
     # d'écoute interne de l'API dans le conteneur, à adapter si l'API écoute
     # sur un autre port.
+    networks:
+      - g4_net
 
 networks:
   g4_net:

@@ -3,7 +3,7 @@ name: g4-etl
 services:
   etl:
     image: ${IMAGE}
-    container_name: g4_etl
+    container_name: g4_etl_${STAGE}
     restart: unless-stopped
     environment:
       # Source des mesures. Le collecteur ne touche jamais a la base de donnees :
