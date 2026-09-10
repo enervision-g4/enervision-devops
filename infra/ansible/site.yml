@@ -1,0 +1,139 @@
+---
+# Prepares a host to back up and restore the database.
+#
+#   ansible-playbook site.yml -K
+#
+# Targets any Linux machine by exporting a different G4_SSH_HOST — a
+# recovery VM, a test VM. Nothing in this repository is wired to one
+# particular server.
+#
+# Idempotent: safe to re-run. A second run must report zero `changed`.
+#
+# ── Scope, deliberately narrow ────────────────────────────────────────
+# Ansible handles neither the application deployment (that is
+# .github/workflows/deploy.yml), nor the self-hosted runners (brought up
+# by hand from infra/runners/), nor host hardening — the school server is
+# shared with other groups, so its network and SSH policy is not one
+# project's call.
+#
+# No role either: a role pays off when it is reused. Called once, from
+# one playbook, on one host group, it only adds a layer of indirection
+# between the variables and the tasks that read them.
+#
+# ── Privileges ────────────────────────────────────────────────────────
+# `become: true` because installing packages needs root, and `-K` prompts
+# for the sudo password once. The account must be in the sudo group; it
+# does NOT need NOPASSWD, and deliberately so: the account that deploys
+# on every push has no root at all.
+
+- name: Install the database backup tooling
+  hosts: backup_agents
+  become: true
+
+  tasks:
+    - name: Require the backup credentials
+      # Asserted first: writing half a configuration and failing later
+      # leaves the host in a state nobody can reason about.
+      ansible.builtin.assert:
+        that:
+          - g4_restic_repository | length > 0
+          - g4_restic_password | length > 0
+          - g4_postgres_user | length > 0
+          - g4_postgres_db | length > 0
+        fail_msg: >-
+          Export RESTIC_REPOSITORY, RESTIC_PASSWORD, POSTGRES_USER,
+          POSTGRES_PASSWORD and POSTGRES_DB (the onprem-{{ g4_stage }}
+          GitHub Environment secrets) before running this playbook.
+
+    - name: Install the PostgreSQL client and the decompression tool
+      ansible.builtin.apt:
+        name:
+          - postgresql-client
+          - bzip2
+          - ca-certificates
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ── restic ────────────────────────────────────────────────────────
+    # Deliberately NOT `apt: name=restic`. Some distribution packages are
+    # built without the cloud backends: the playbook succeeds, then the
+    # first backup fails with "invalid backend". Green at provisioning,
+    # broken in use — the worst of both worlds.
+    - name: Check which restic is already installed
+      ansible.builtin.command: "{{ g4_restic_bin }} version"
+      register: g4_restic_current
+      changed_when: false
+      failed_when: false
+
+    - name: Install the official restic release
+      when: g4_restic_version not in (g4_restic_current.stdout | default(''))
+      block:
+        - name: Download restic
+          ansible.builtin.get_url:
+            url: >-
+              https://github.com/restic/restic/releases/download/v{{ g4_restic_version }}/restic_{{
+              g4_restic_version }}_linux_{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.bz2
+            dest: "/usr/local/src/restic-{{ g4_restic_version }}.bz2"
+            mode: "0644"
+
+        - name: Decompress restic
+          ansible.builtin.command:
+            cmd: "bunzip2 --keep --force /usr/local/src/restic-{{ g4_restic_version }}.bz2"
+            creates: "/usr/local/src/restic-{{ g4_restic_version }}"
+
+        - name: Put restic on the PATH
+          ansible.builtin.copy:
+            src: "/usr/local/src/restic-{{ g4_restic_version }}"
+            dest: "{{ g4_restic_bin }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0755"
+
+    - name: Verify that this restic supports the configured repository backend
+      # The scheme is parsed before any connection, so a missing backend
+      # fails here — immediately, with no credentials and no network.
+      # Better to fail at provisioning time than during the first
+      # nightly backup.
+      ansible.builtin.command:
+        argv:
+          - "{{ g4_restic_bin }}"
+          - "-r"
+          - "{{ g4_restic_repository.split(':')[0] }}:probe:/probe"
+          - "cat"
+          - "config"
+      register: g4_restic_probe
+      changed_when: false
+      failed_when: "'invalid backend' in (g4_restic_probe.stderr | default(''))"
+
+    # ── Script and configuration ──────────────────────────────────────
+    - name: Create the directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ g4_bin_dir }}", owner: "{{ g4_deploy_user }}", mode: "0755" }
+        - { path: "/etc/g4", owner: "root", mode: "0750" }
+
+    - name: Install the backup script
+      # The same file mounted into the Kubernetes CronJob: only one
+      # backup logic exists, whichever path executes it.
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../scripts/db-backup-to-azure.sh"
+        dest: "{{ g4_bin_dir }}/db-backup-to-azure.sh"
+        owner: "{{ g4_deploy_user }}"
+        group: "{{ g4_deploy_user }}"
+        mode: "0755"
+
+    - name: Write the backup environment file
+      ansible.builtin.template:
+        src: backup.env.j2
+        dest: "{{ g4_env_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
